@@ -2,7 +2,7 @@ import type { NationId, TileIndex, UnitType } from '../../shared/types';
 import type { Game } from '../core/game';
 import type { GameMap } from '../map/gameMap';
 import { xOf, yOf } from '../map/grid';
-import { stepTroopBoat } from './naval';
+import { spawnTradeShips, stepTradeShip, stepTroopBoat, stepWarship } from './naval';
 
 /** Anything that moves over the map: boats, ships and planes. Positions are in tile coordinates. */
 export interface Unit {
@@ -29,6 +29,8 @@ export interface Unit {
   mission: 'outbound' | 'returning' | 'patrol';
   /** Nations already warned about this unit by their radar. */
   warned: Set<NationId>;
+  /** For trade units: who owned the destination when it set out (the trade only pays if they still do). */
+  partner: NationId;
 }
 
 type UnitInit = Pick<Unit, 'type' | 'owner' | 'x' | 'y'> & Partial<Unit>;
@@ -37,7 +39,7 @@ type UnitInit = Pick<Unit, 'type' | 'owner' | 'x' | 'y'> & Partial<Unit>;
 export function spawnUnit(game: Game, init: UnitInit): Unit {
   const unit: Unit = {
     id: game.nextId(), hp: 1, troops: 0, path: [], pathIndex: 0, targetTile: -1, homeId: null, destId: null,
-    patrol: null, cooldown: 0, mission: 'outbound', warned: new Set(), ...init,
+    patrol: null, cooldown: 0, mission: 'outbound', warned: new Set(), partner: 0, ...init,
   };
   game.units.set(unit.id, unit);
   return unit;
@@ -75,10 +77,22 @@ export function advanceAlongPath(u: Unit, map: GameMap, speed: number): boolean 
 
 /** One tick for every unit, in the order they were created. */
 export function stepUnits(game: Game): void {
+  spawnTradeShips(game);
   for (const u of [...game.units.values()]) {
     if (!game.units.has(u.id)) continue; // removed earlier this tick
     if (u.type === 'troopBoat') stepTroopBoat(game, u);
+    else if (u.type === 'tradeShip') stepTradeShip(game, u);
+    else if (u.type === 'warship') stepWarship(game, u);
   }
+}
+
+/** Length of the polyline through `path`'s waypoints, in tiles. */
+export function pathLength(map: GameMap, path: readonly TileIndex[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    total += Math.hypot(xOf(map, path[i]) - xOf(map, path[i - 1]), yOf(map, path[i]) - yOf(map, path[i - 1]));
+  }
+  return total;
 }
 
 /** How many units of `type` nation `owner` has out. */

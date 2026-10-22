@@ -34,7 +34,8 @@ export const CONFIG = {
   },
   units: {
     troopBoat: { speed: 1.0, baseCap: 3 },
-    tradeShip: { speed: 0.8, goldBase: 50, goldPerTile: 1 },
+    // partners whose port lies preferredMin–preferredMax tiles away are picked at full weight, others at offRangeWeight
+    tradeShip: { speed: 0.8, goldBase: 50, goldPerTile: 1, preferredMin: 50, preferredMax: 300, offRangeWeight: 0.25 },
     warship: { cost: 3000, buildTicks: 60, speed: 0.8, hp: 10, range: 12, hitChance: 0.3, patrolRadius: 30 },
     tradePlane: { speed: 2.5, goldBase: 60, goldPerTile: 1.2 },
     bomber: { cost: 2500, speed: 2, hp: 3, radius: 4, killFactor: 0.5, cooldownTicks: 100 },
