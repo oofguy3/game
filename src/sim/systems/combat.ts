@@ -4,6 +4,7 @@ import type { NationId, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
 import type { Nation } from '../core/nation';
 import { forEachNeighbor } from '../map/grid';
+import { buildingsInRadius } from './buildings';
 
 export interface ConquestEstimate {
   tiles: number;
@@ -16,9 +17,24 @@ export function density(n: Nation): number {
   return n.troops / Math.max(1, n.tiles);
 }
 
-/** How much defense buildings multiply the cost of taking `tile`. Always 1 until buildings exist (Task 10). */
+const DEFENSE_TYPES = ['defensePost', 'fortress'] as const;
+
+/**
+ * How much defense buildings multiply the cost of taking `tile`: the largest `multiplier` among the tile owner's active
+ * defense posts and fortresses whose `radius` reaches it. They don't stack; with none in range, or on unowned land, 1.
+ */
 export function defenseMultiplier(game: Game, tile: TileIndex): number {
-  return 1;
+  const owner = game.owner[tile];
+  if (owner === 0) return 1;
+  const counts = game.nations[owner].buildingCounts;
+  let best = 1;
+  for (const type of DEFENSE_TYPES) {
+    const { radius, multiplier } = CONFIG.buildings[type];
+    // buildingCounts holds active buildings only, so most calls end here without a search
+    if (counts[type] === 0 || multiplier <= best) continue;
+    if (buildingsInRadius(game, owner, [type], tile, radius).some((b) => b.ticksLeft === 0)) best = multiplier;
+  }
+  return best;
 }
 
 /**

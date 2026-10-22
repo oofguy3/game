@@ -9,6 +9,7 @@ import { buildWaterNav } from '../map/waterNav';
 import type { WaterNav } from '../map/waterNav';
 import { stepAttacks } from '../systems/attacks';
 import type { Attack } from '../systems/attacks';
+import { BuildingStore, onTileCaptured, stepBuildings } from '../systems/buildings';
 import { stepEconomy } from '../systems/economy';
 import { Relations } from '../systems/relations';
 import { endSpawnPhase } from '../systems/spawn';
@@ -65,6 +66,8 @@ export class Game {
   relations: Relations;
   /** Running attacks, in the order they started. */
   attacks: Attack[] = [];
+  /** Every building on the map, finished or under construction. */
+  readonly buildings = new BuildingStore();
   /** Called after each ownership change, once the game state is already updated. */
   onOwnerChange: ((tile: TileIndex, from: NationId, to: NationId) => void)[] = [];
 
@@ -103,6 +106,7 @@ export class Game {
     });
     this.relations = new Relations(this.nations.length);
     this.spawnSpacing = spawnSpacingFor(setup.map.landCount, this.nations.length - 1);
+    this.onOwnerChange.push((tile, from, to) => onTileCaptured(this, tile, from, to));
   }
 
   /** A fresh id for buildings, units, requests and the like; ids start at 1. */
@@ -134,7 +138,7 @@ export class Game {
       if (this.tick >= this.spawnEndsAt) endSpawnPhase(this);
       return;
     }
-    // Task 10: stepBuildings
+    stepBuildings(this);
     stepEconomy(this);
     stepAttacks(this);
     // Task 18: stepUnits
