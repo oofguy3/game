@@ -38,10 +38,10 @@ export function rankBuilds(game: Game, p: Perception, bot: Bot): BuildPlan[] {
     barracks: p.growth * B.barracks.growthBonus * tgv * H * w.economy,
     defensePost: threat * B.defensePost.multiplier * H * defenseUrgency * w.defense,
     fortress: threat * B.fortress.multiplier * H * defenseUrgency * w.defense,
-    port: hasTradePartner(game, p.me)
-      ? ((CONFIG.units.tradeShip.goldBase + 100 * CONFIG.units.tradeShip.goldPerTile) / B.port.tradeEveryTicks) * H * w.trade
+    port: portBenefit(game, p, bot),
+    navalBase: game.tick - bot.memory.lastNavalThreatTick <= CONFIG.ai.navalThreatTicks
+      ? H * CONFIG.ai.navalUrgency * w.defense
       : 0,
-    navalBase: 0,
     airport: 0,
     antiAir: 0,
     radar: 0,
@@ -180,6 +180,19 @@ function coastPlacement(game: Game, me: NationId, type: BuildingType): TileIndex
     }
   }
   return best;
+}
+
+/**
+ * A port's worth: the gold of a typical trade run over the horizon when someone can trade with us, half as much again
+ * when there is somewhere overseas to invade (ports carry more boats); nothing on a nation without coast.
+ */
+function portBenefit(game: Game, p: Perception, bot: Bot): number {
+  if (p.coastalTiles === 0) return 0;
+  const { tradeShip } = CONFIG.units;
+  const run = ((tradeShip.goldBase + 100 * tradeShip.goldPerTile) / CONFIG.buildings.port.tradeEveryTicks)
+    * CONFIG.ai.buildHorizonTicks * bot.weights.trade;
+  const trading = hasTradePartner(game, p.me) ? run : 0;
+  return bot.memory.overseasTargets ? Math.max(trading, run) * CONFIG.ai.portInvasionBonus : trading;
 }
 
 /** The biggest threat to `p.me`: the strongest neighbour at war, or a neutral one `strongNeutralThreat`× stronger. */

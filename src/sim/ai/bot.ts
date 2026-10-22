@@ -3,6 +3,7 @@ import type { Game } from '../core/game';
 import { Rng } from '../util/rng';
 import { chooseBuild } from './economy';
 import { chooseAttacks } from './military';
+import { chooseInvasion, manageWarships } from './naval';
 import { perceive } from './perception';
 import { DIFFICULTY, PERSONALITY } from './profile';
 import type { DifficultyProfile, PersonalityWeights } from './profile';
@@ -18,6 +19,8 @@ export interface BotMemory {
   /** A nation this bot prefers to attack, such as an ally's joint-attack target. */
   focusTarget: NationId | null;
   lastNavalThreatTick: number;
+  /** Whether the last look overseas found something to invade (makes ports worth more). */
+  overseasTargets: boolean;
 }
 
 /** A tick long before any game starts, so cooldowns measured from it have always run out. */
@@ -45,6 +48,7 @@ export class Bot {
     betrayTarget: null,
     focusTarget: null,
     lastNavalThreatTick: LONG_AGO,
+    overseasTargets: false,
   };
 
   private readonly game: Game;
@@ -70,7 +74,13 @@ export class Bot {
     const commands: Command[] = [];
     const build = chooseBuild(this.game, p, this);
     if (build) commands.push(build);
-    commands.push(...chooseAttacks(this.game, p, this));
+    const attacks = chooseAttacks(this.game, p, this);
+    commands.push(...attacks);
+    if (attacks.length === 0) {
+      const invasion = chooseInvasion(this.game, p, this);
+      if (invasion) commands.push(invasion);
+    }
+    commands.push(...manageWarships(this.game, p, this));
     return commands;
   }
 }

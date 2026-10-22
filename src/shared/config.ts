@@ -68,6 +68,13 @@ export const CONFIG = {
         strongNeutralThreat: 1.5,
         // building placement: own tiles sampled for interior spots (from a search of this many tiles around the
         // centroid), border tiles sampled, and how far inland front defenses sit
-        interiorSamples: 60, interiorSearch: 600, borderSamples: 200, frontInset: 3 },
+        interiorSamples: 60, interiorSearch: 600, borderSamples: 200, frontInset: 3,
+        // sea invasions: distance (tiles) that halves a target's appeal, and coastal tiles sampled per water body
+        invasionDistanceScale: 100, invasionCoastSamples: 3000,
+        // naval defense: how long an invasion by sea keeps a bot alert, how much it values a naval base meanwhile,
+        // and how many warships it keeps per naval base
+        navalThreatTicks: 600, navalUrgency: 60, warshipsPerBase: 2,
+        // ports are worth this much more when there is somewhere overseas to invade
+        portInvasionBonus: 1.5 },
   client: { labelEveryTicks: 20, maxCatchUpTicks: 8 },
 } as const;
