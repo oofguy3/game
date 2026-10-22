@@ -13,7 +13,11 @@ describe('world map asset', () => {
   it.each([[2.35, 48.85], [10, 23], [134, -25], [-100, 40], [78, 22], [-60, -10]])('land at %s,%s', (lon, lat) =>
     expect(map.terrain[lonLatToTile(lon, lat)]).not.toBe(Terrain.Water));
 
-  it.each([[-30, 30], [-150, 0], [0, 0], [70, -20], [160, 30]])('water at %s,%s', (lon, lat) =>
+  // Rows between the antimeridian-wrapping edges of the Eurasia ring (65-69N) and Wrangel Island (71N): a scanline that ignores the wrap inverts them.
+  it.each([[100, 66.5], [130, 67], [175, 66], [-125, 67], [20, 67.5], [-179, 71.3]])('land across the antimeridian rows at %s,%s', (lon, lat) =>
+    expect(map.terrain[lonLatToTile(lon, lat)]).not.toBe(Terrain.Water));
+
+  it.each([[-30, 30], [-150, 0], [0, 0], [70, -20], [160, 30], [-30, 66.5], [0, 67]])('water at %s,%s', (lon, lat) =>
     expect(map.terrain[lonLatToTile(lon, lat)]).toBe(Terrain.Water));
 
   it('land share is 25–45%', () => {

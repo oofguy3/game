@@ -33,23 +33,52 @@ function loadLandRings(): Ring[] {
   return rings;
 }
 
+const WORLD_WIDTH_DEGREES = 360;
+/** Copies of every ring, shifted by these many full turns, so that rings unwrapped past +-180 still reach the visible range. */
+const WRAP_COPIES = [-1, 0, 1];
+
+/**
+ * The atlas rings are not split at the antimeridian: an edge that crosses it jumps by almost 360 degrees of longitude.
+ * Adds +-360 after such a jump, so consecutive longitudes differ by at most 180 and the ring is continuous
+ * (it may then reach slightly past +-180).
+ */
+function unwrapRing(ring: Ring): Ring {
+  const unwrapped: Ring = [];
+  let offset = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const [lon, lat] = ring[i];
+    if (i > 0) {
+      const jump = lon - ring[i - 1][0];
+      if (jump > 180) offset -= WORLD_WIDTH_DEGREES;
+      else if (jump < -180) offset += WORLD_WIDTH_DEGREES;
+    }
+    unwrapped.push([lon + offset, lat]);
+  }
+  return unwrapped;
+}
+
 /**
  * Scanline fill, even-odd across every ring (so lakes and holes come out as water): for each row the crossings of
  * all ring edges at the row-centre latitude are sorted, and tiles whose centre longitude lies between a pair are land.
+ * Rings are unwrapped across the antimeridian and crossed at -360, 0 and +360 offsets, so pairing the full sorted list
+ * keeps the right parity at the left edge of the map; only the visible range [-180, 180) is filled.
  */
 function rasterize(rings: Ring[]): Uint8Array {
   const { width, height, latMax, latMin } = WORLD_PROJECTION;
   const terrain = new Uint8Array(width * height);
+  const unwrappedRings = rings.map(unwrapRing);
   const crossings: number[] = [];
 
   for (let y = 0; y < height; y++) {
     const lat = latMax - ((y + 0.5) * (latMax - latMin)) / height;
     crossings.length = 0;
-    for (const ring of rings) {
+    for (const ring of unwrappedRings) {
       for (let i = 0; i < ring.length - 1; i++) {
         const [lon1, lat1] = ring[i];
         const [lon2, lat2] = ring[i + 1];
-        if (lat1 > lat !== lat2 > lat) crossings.push(lon1 + ((lat - lat1) * (lon2 - lon1)) / (lat2 - lat1));
+        if (lat1 > lat === lat2 > lat) continue;
+        const crossing = lon1 + ((lat - lat1) * (lon2 - lon1)) / (lat2 - lat1);
+        for (const copy of WRAP_COPIES) crossings.push(crossing + copy * WORLD_WIDTH_DEGREES);
       }
     }
     crossings.sort((a, b) => a - b);
