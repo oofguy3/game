@@ -105,6 +105,13 @@ function paced(
   return Math.min(budget, Math.max(0, useful - committed));
 }
 
+/** The score of attacking neighbour `n` (allied or not) with the whole attack budget, without noise; 0 without one. */
+export function scoreNeighbor(game: Game, p: Perception, bot: Bot, n: NeighborInfo): number {
+  const budget = attackBudget(p, bot.profile);
+  if (budget < 1) return 0;
+  return nationScore(p, bot, n, estimateConquest(game, p.me, n.id, budget));
+}
+
 /** The score of attacking neighbour `n`, given the estimate `est` of attacking it with the budget. */
 function nationScore(p: Perception, bot: Bot, n: NeighborInfo, est: ConquestEstimate): number {
   const { profile, weights, memory } = bot;

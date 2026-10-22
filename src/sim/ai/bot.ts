@@ -4,6 +4,7 @@ import type { Game } from '../core/game';
 import { buildingCost } from '../systems/buildings';
 import { Rng } from '../util/rng';
 import { chooseParadrop, manageAirDefense, planCombinedArms } from './air';
+import { considerBetrayal, evaluateRequest, proposeDiplomacy } from './diplomacy';
 import { chooseBuild } from './economy';
 import { chooseAttacks } from './military';
 import { chooseInvasion, manageWarships } from './naval';
@@ -72,14 +73,17 @@ export class Bot {
   }
 
   /**
-   * The decisions themselves, made only while the game is being played: an attack held back for bombs once they
-   * should have fallen; a building; attacks (one on a fortified front may wait for bombs first, and the held target is
-   * left alone meanwhile); an invasion when nothing else is going on; paratroopers with what the budget has left; and
-   * the warships and fighters. A held target that attacks us is answered at once instead.
+   * The decisions themselves, made only while the game is being played: answers to the requests addressed to us; an
+   * attack held back for bombs once they should have fallen; a building; attacks (one on a fortified front may wait for
+   * bombs first, and the held target is left alone meanwhile); an invasion when nothing else is going on; paratroopers
+   * with what the budget has left; the warships and fighters; a betrayal; and new proposals. A held target that
+   * attacks us is answered at once instead. Nothing is aimed at an ally, at a nation whose alliance we accept now or
+   * at one we have offered an alliance (it may accept before our command lands).
    */
   protected decide(): Command[] {
     const game = this.game;
-    let p = perceive(game, this.id);
+    const me = this.id;
+    let p = perceive(game, me);
     const commands: Command[] = [];
     // each command's gold comes off what the later decisions of this think see
     const issue = (cmd: Command): void => {
@@ -87,18 +91,43 @@ export class Bot {
       const gold = commandGold(game, cmd);
       if (gold > 0) p = { ...p, gold: p.gold - gold };
     };
+
+    const accepting = new Set<NationId>();
+    for (const req of [...game.requests.values()]) {
+      if (req.to !== me) continue;
+      const accept = evaluateRequest(game, p, this, req);
+      if (accept && req.kind === 'alliance') accepting.add(req.from);
+      issue({ type: 'respond', nation: me, requestId: req.id, accept });
+      if (accept && req.kind === 'deal' && req.deal) p = { ...p, gold: p.gold - req.deal.getGold };
+    }
+    const offered = new Set<NationId>();
+    for (const req of game.requests.values()) if (req.kind === 'alliance' && req.from === me) offered.add(req.to);
+    const spared = (target: NationId): boolean => target !== 0
+      && (game.relations.get(me, target) === 'allied' || accepting.has(target) || offered.has(target));
+    const aimedAt = (cmd: Command): NationId | null => {
+      if (cmd.type === 'attack' || cmd.type === 'boat' || cmd.type === 'bomb' || cmd.type === 'paradrop') return game.owner[cmd.tile];
+      return null;
+    };
+    const allowed = (cmd: Command): boolean => {
+      const target = aimedAt(cmd);
+      return target === null || !spared(target);
+    };
+
     let spent = 0;
     let held: NationId | null = null;
     const pending = this.memory.pendingAttack;
     if (pending) {
-      if (p.neighbors.some((n) => n.id === pending.target && n.attackingMe > 0)) {
+      if (spared(pending.target) || p.neighbors.some((n) => n.id === pending.target && n.attackingMe > 0)) {
         this.memory.pendingAttack = null;
       } else {
         held = pending.target;
+        const attack: Command = { type: 'attack', nation: me, tile: pending.tile, ratio: pending.ratio };
         if (game.tick >= pending.at) {
           this.memory.pendingAttack = null;
-          issue({ type: 'attack', nation: this.id, tile: pending.tile, ratio: pending.ratio });
-          spent += pending.ratio * p.troops;
+          if (allowed(attack)) {
+            issue(attack);
+            spent += pending.ratio * p.troops;
+          }
         }
       }
     }
@@ -107,7 +136,7 @@ export class Bot {
     let attacked = false;
     let bombing = false;
     for (const attack of chooseAttacks(game, p, this)) {
-      if (attack.type !== 'attack' || (held !== null && game.owner[attack.tile] === held)) continue;
+      if (attack.type !== 'attack' || !allowed(attack) || (held !== null && game.owner[attack.tile] === held)) continue;
       const bombs = planCombinedArms(game, p, this, attack);
       if (bombs.length > 0) {
         bombs.forEach(issue);
@@ -120,14 +149,21 @@ export class Bot {
     }
     if (!attacked && held === null && !bombing) {
       const invasion = chooseInvasion(game, p, this);
-      if (invasion) issue(invasion);
+      if (invasion && allowed(invasion)) issue(invasion);
     }
     if (!bombing) {
       const drop = chooseParadrop(game, p, this, spent);
-      if (drop) issue(drop);
+      if (drop && allowed(drop)) issue(drop);
     }
     manageWarships(game, p, this).forEach(issue);
     manageAirDefense(game, p, this).forEach(issue);
+
+    const traitorTo = considerBetrayal(game, p, this);
+    if (traitorTo !== null) {
+      issue({ type: 'breakAlliance', nation: me, with: traitorTo });
+      this.memory.betrayTarget = traitorTo;
+    }
+    proposeDiplomacy(game, p, this).forEach(issue);
     return commands;
   }
 }
@@ -140,6 +176,7 @@ function commandGold(game: Game, cmd: Command): number {
     case 'bomb': return U.bomber.cost;
     case 'paradrop': return U.paraPlane.cost;
     case 'buildUnit': return cmd.unit === 'warship' ? U.warship.cost : U.fighter.cost;
+    case 'proposeDeal': return cmd.deal.giveGold;
     default: return 0;
   }
 }

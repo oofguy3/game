@@ -85,6 +85,16 @@ export const CONFIG = {
         siteSearch: 10,
         // bombing first: the front defense worth softening, and how far behind the border its defenses may stand;
         // paradrops: how far behind the front a target must be, and the radius that groups buildings into a cluster
-        bombDefense: 1.2, bombReach: 25, paraDepth: 15, paraClusterRadius: 10 },
+        bombDefense: 1.2, bombReach: 25, paraDepth: 15, paraClusterRadius: 10,
+        // diplomacy: the least trust for an alliance; a partner this strong relative to us (or a diplomacy weight this
+        // high) makes one worth having; incoming troops (share of ours) that make peace worth asking for; a joint
+        // attack's target must score this share of our best target
+        allyTrust: 0.3, allyStrength: 0.7, allyDiplomacy: 1.2, peaceIncomingShare: 0.5, jointAttackShare: 0.5,
+        // deals: troops are worth this much more at war; gold idle for this many ticks of income buys troops, spending
+        // up to dealGoldShare of it on at most dealTroopShare of the seller's troops, at dealMargin over their worth
+        warTroopValue: 1.5, richIncomeTicks: 300, dealGoldShare: 0.5, dealTroopShare: 0.3, dealMargin: 1.25,
+        // betrayal: the least betrayal weight; an ally must score this many times the next target and have at most
+        // this share of our density
+        betrayalWeight: 0.5, betrayalScore: 2, betrayalDensity: 0.6 },
   client: { labelEveryTicks: 20, maxCatchUpTicks: 8 },
 } as const;
