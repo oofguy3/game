@@ -1,0 +1,27 @@
+{
+  "name": "game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "arena": "tsx scripts/arena.ts",
+    "perf": "tsx scripts/perf.ts",
+    "build:world": "tsx scripts/build-world-map.ts"
+  },
+  "dependencies": {
+    "simplex-noise": "4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "tsx": "4.23.14",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}
