@@ -62,6 +62,10 @@ export class Game {
   spawnSpacing: number;
   /** Owning nation per tile; 0 = unowned. */
   owner: Uint16Array;
+  /** Goes up with every ownership change, so caches of anything derived from `owner` can tell they are stale. */
+  ownerVersion = 0;
+  /** Unowned land tiles left on each landmass, by landmass id. */
+  readonly unownedLand: Int32Array;
   /** Indexed by nation id; `nations[0]` is the placeholder for unowned land and is never alive. */
   nations: Nation[];
   /** The human player's nation id, or 0 when there is no player. */
@@ -91,6 +95,7 @@ export class Game {
     this.checkVictory = setup.checkVictory ?? true;
     this.spawnEndsAt = setup.spawnTicks ?? CONFIG.spawn.phaseTicks;
     this.owner = new Uint16Array(setup.map.width * setup.map.height);
+    this.unownedLand = Int32Array.from(setup.map.landmassSize);
 
     const unowned = createNation({
       id: 0, name: UNOWNED_NAME, color: UNOWNED_COLOR, isPlayer: false, difficulty: null, personality: null,
@@ -169,6 +174,9 @@ export class Game {
     const from = this.owner[tile];
     if (from === to) return;
     this.owner[tile] = to;
+    this.ownerVersion++;
+    const landmass = this.map.landmass[tile];
+    if (landmass >= 0 && (from === 0 || to === 0)) this.unownedLand[landmass] += from === 0 ? -1 : 1;
     const x = xOf(this.map, tile);
     const y = yOf(this.map, tile);
     if (from !== 0) {

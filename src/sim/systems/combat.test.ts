@@ -178,3 +178,33 @@ describe('estimateConquest', () => {
     expect(g.rng.next()).toBe(twin.rng.next());
   });
 });
+
+describe('estimateConquest within one tick', () => {
+  it('sees land and buildings that changed hands since the last estimate, even in the same tick', () => {
+    const g = makeTestGame({ map: ['##########'], owners: ['aaaabbbbbb'], nations: [{ troops: 100_000 }, { troops: 600 }] });
+    const before = estimateConquest(g, 1, 2, 100_000);
+    expect(before.tiles).toBe(6);
+    g.setOwner(4, 1);
+    g.setOwner(5, 1);
+    expect(estimateConquest(g, 1, 2, 100_000).tiles).toBe(4);
+    const perTile = (): number => {
+      const e = estimateConquest(g, 1, 2, 100_000);
+      return e.attackerLoss / e.tiles;
+    };
+    const open = perTile();
+    g.buildings.add({ id: g.nextId(), type: 'fortress', owner: 2, tile: 8, ticksLeft: 0, cooldown: 0 });
+    g.nations[2].buildingCounts.fortress++;
+    expect(perTile()).toBeCloseTo(open * CONFIG.buildings.fortress.multiplier, 6);
+    expect(perTile()).toBeCloseTo(tileCaptureCost(g, 1, 6), 6);
+  });
+
+  it('counts the free land left on a landmass as it is taken', () => {
+    const g = makeTestGame({ map: ['########..##'], owners: ['a...........'], nations: [{ troops: 1e6 }] });
+    expect(estimateConquest(g, 1, 0, 1e6).tiles).toBe(7);
+    g.setOwner(5, 1);
+    g.setOwner(6, 1);
+    expect(estimateConquest(g, 1, 0, 1e6).tiles).toBe(5);
+    g.setOwner(6, 0);
+    expect(estimateConquest(g, 1, 0, 1e6).tiles).toBe(6);
+  });
+});

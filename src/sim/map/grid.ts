@@ -35,5 +35,7 @@ export function isLand(map: GameMap, t: TileIndex): boolean {
 
 /** Euclidean distance between two tile centres, in tiles. */
 export function distance(map: GameMap, a: TileIndex, b: TileIndex): number {
-  return Math.hypot(xOf(map, a) - xOf(map, b), yOf(map, a) - yOf(map, b));
+  const dx = xOf(map, a) - xOf(map, b);
+  const dy = yOf(map, a) - yOf(map, b);
+  return Math.sqrt(dx * dx + dy * dy);
 }

@@ -508,3 +508,20 @@ describe('makeTestGame', () => {
     expect(() => makeTestGame({ map: ['##'], owners: ['ab'], nations: [{}] })).toThrow();
   });
 });
+
+describe('Game ownership bookkeeping', () => {
+  it('keeps the free land per landmass and an ownership version in step with setOwner', () => {
+    const g = makeTestGame({ map: ['###..##'], owners: ['a......'], nations: [{}, {}] });
+    const left = g.map.landmass[0];
+    const right = g.map.landmass[5];
+    expect([g.unownedLand[left], g.unownedLand[right]]).toEqual([2, 2]);
+    const v = g.ownerVersion;
+    g.setOwner(5, 2);
+    g.setOwner(5, 1); // owned to owned: no free land changes
+    g.setOwner(0, 0);
+    expect([g.unownedLand[left], g.unownedLand[right]]).toEqual([3, 1]);
+    expect(g.ownerVersion).toBe(v + 3);
+    g.setOwner(5, 1); // no change, no new version
+    expect(g.ownerVersion).toBe(v + 3);
+  });
+});

@@ -66,23 +66,58 @@ export function chooseInvasion(game: Game, p: Perception, bot: Bot): Command | n
   return { type: 'boat', nation: p.me, tile: best.tile, ratio: Math.min(1, Math.max(minAttackRatio, budget / p.troops)) };
 }
 
-/** Per overseas owner (0 = free land) not allied with us: its coastal tile nearest our coast, and how far. */
-function overseasTargets(game: Game, me: NationId): { owner: NationId; tile: TileIndex; distance: number }[] {
+interface OverseasTarget {
+  owner: NationId;
+  tile: TileIndex;
+  distance: number;
+}
+
+/** Each nation's last scan of overseas targets, per game. */
+const targetCache = new WeakMap<Game, Map<NationId, { at: number; targets: OverseasTarget[] }>>();
+
+/**
+ * `me`'s overseas targets: a scan (see `scanOverseas`) reused for `overseasRefreshTicks`, less any target whose tile
+ * has since changed hands or whose owner has died or become an ally.
+ */
+function overseasTargets(game: Game, me: NationId): OverseasTarget[] {
+  let perGame = targetCache.get(game);
+  if (!perGame) targetCache.set(game, (perGame = new Map()));
+  const cached = perGame.get(me);
+  if (!cached || game.tick - cached.at >= CONFIG.ai.overseasRefreshTicks || game.tick < cached.at) {
+    perGame.set(me, { at: game.tick, targets: scanOverseas(game, me) });
+    return perGame.get(me)!.targets;
+  }
+  return cached.targets.filter((t) => game.owner[t.tile] === t.owner
+    && (t.owner === 0 || (game.nations[t.owner].alive && game.relations.get(me, t.owner) !== 'allied')));
+}
+
+/**
+ * Per overseas owner (0 = free land) not allied with us: its coastal tile nearest our coast (measured from up to
+ * `invasionShoreSamples` of our coastal border tiles), and how far.
+ */
+function scanOverseas(game: Game, me: NationId): OverseasTarget[] {
   const { map } = game;
   const mine = new Set<number>();
   const bodies = new Set<number>();
-  const shore: TileIndex[] = [];
+  const coastal: TileIndex[] = [];
   for (const b of game.nations[me].border) {
     mine.add(map.landmass[b]);
     if (map.coastal[b] === 0) continue;
-    if (shore.length < CONFIG.ai.borderSamples) shore.push(b);
+    coastal.push(b);
     forEachNeighbor(map, b, (n) => {
       if (map.waterBody[n] >= 0) bodies.add(map.waterBody[n]);
     });
   }
-  if (shore.length === 0) return [];
+  if (coastal.length === 0) return [];
+  const stride = Math.max(1, Math.floor(coastal.length / CONFIG.ai.invasionShoreSamples));
+  const sx: number[] = [];
+  const sy: number[] = [];
+  for (let i = 0; i < coastal.length; i += stride) {
+    sx.push(coastal[i] % map.width);
+    sy.push(Math.floor(coastal[i] / map.width));
+  }
   const index = coastsByBody(map);
-  const best = new Map<NationId, { owner: NationId; tile: TileIndex; distance: number }>();
+  const best = new Map<NationId, OverseasTarget>();
   for (const body of bodies) {
     const coast = index.get(body) ?? [];
     const step = Math.max(1, Math.floor(coast.length / CONFIG.ai.invasionCoastSamples));
@@ -91,8 +126,16 @@ function overseasTargets(game: Game, me: NationId): { owner: NationId; tile: Til
       const owner = game.owner[t];
       if (owner === me || mine.has(map.landmass[t])) continue;
       if (owner !== 0 && (!game.nations[owner].alive || game.relations.get(me, owner) === 'allied')) continue;
-      let d = Infinity;
-      for (const s of shore) d = Math.min(d, distance(map, s, t));
+      const x = t % map.width;
+      const y = Math.floor(t / map.width);
+      let d2 = Infinity;
+      for (let j = 0; j < sx.length; j++) {
+        const dx = sx[j] - x;
+        const dy = sy[j] - y;
+        const d = dx * dx + dy * dy;
+        if (d < d2) d2 = d;
+      }
+      const d = Math.sqrt(d2);
       const prev = best.get(owner);
       if (!prev || d < prev.distance) best.set(owner, { owner, tile: t, distance: d });
     }

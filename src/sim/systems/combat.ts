@@ -77,32 +77,68 @@ export function estimateConquest(
   troops: number,
   opts: EstimateOptions = {},
 ): ConquestEstimate {
-  const { estimateSamples, defenderLossFactor } = CONFIG.combat;
+  const { neutralCost, baseCost, densityFactor, defenderLossFactor } = CONFIG.combat;
+  const tally = frontierTallies(game, attacker).get(target);
+  if (!tally || !(troops > 0)) return { tiles: 0, attackerLoss: 0, defenderLoss: 0 };
   const defender = game.nations[target];
   const defenderTroops = target === 0 ? 0 : opts.defenderTroops ?? defender.troops;
   const defenderDensity = defenderTroops / Math.max(1, defender.tiles);
-  const landmasses = new Set<number>();
-  let samples = 0;
-  let costSum = 0;
-  const sample = (t: TileIndex): void => {
-    if (samples >= estimateSamples || !isTargetTile(game, t, target)) return;
-    samples++;
-    costSum += captureCostAt(game, t, defenderDensity);
-    if (target === 0) landmasses.add(game.map.landmass[t]);
-  };
-  for (const b of game.nations[attacker].border) {
-    forEachNeighbor(game.map, b, sample);
-    if (samples >= estimateSamples) break;
-  }
-  if (samples === 0 || !(troops > 0)) return { tiles: 0, attackerLoss: 0, defenderLoss: 0 };
-
-  const cost = costSum / samples;
+  const cost = (tally.weight * (target === 0 ? neutralCost : baseCost + defenderDensity * densityFactor)) / tally.samples;
   const affordable = Math.floor(troops / cost);
   const tiles = target === 0
-    ? unownedLandOn(game, landmasses, affordable)
+    ? unownedLandOn(game, tally.landmasses, affordable)
     : Math.min(affordable, defender.tiles);
   const defenderLoss = target === 0 ? 0 : Math.min(defenderTroops, tiles * defenderDensity * defenderLossFactor);
   return { tiles, attackerLoss: tiles * cost, defenderLoss };
+}
+
+/** The first `estimateSamples` frontier tiles of one target: how many, and their terrain cost × defense, summed. */
+interface FrontierTally {
+  samples: number;
+  /** Σ terrain cost × defense multiplier (just terrain cost on unowned land). */
+  weight: number;
+  /** Landmasses of the sampled tiles (unowned land only). */
+  landmasses: Set<number>;
+}
+
+/** Per game: the tallies of each attacker's frontier, valid while the tick, the owners and the buildings stay put. */
+const frontierCache = new WeakMap<Game, {
+  tick: number; ownerVersion: number; buildingsVersion: number; byAttacker: Map<NationId, Map<NationId, FrontierTally>>;
+}>();
+
+/**
+ * For every target touching `attacker`'s border (0 = unowned land): the tally of its first `estimateSamples` tiles met
+ * walking the border in order (a tile counted once per border tile it touches). One walk serves every target, and is
+ * reused until the tick, an owner or a building changes.
+ */
+function frontierTallies(game: Game, attacker: NationId): Map<NationId, FrontierTally> {
+  let cache = frontierCache.get(game);
+  if (!cache || cache.tick !== game.tick || cache.ownerVersion !== game.ownerVersion
+    || cache.buildingsVersion !== game.buildings.version) {
+    cache = { tick: game.tick, ownerVersion: game.ownerVersion, buildingsVersion: game.buildings.version, byAttacker: new Map() };
+    frontierCache.set(game, cache);
+  }
+  const known = cache.byAttacker.get(attacker);
+  if (known) return known;
+  const tallies = new Map<NationId, FrontierTally>();
+  const { map, owner } = game;
+  const { terrainCost, estimateSamples } = CONFIG.combat;
+  const visit = (t: TileIndex): void => {
+    const o = owner[t];
+    if (o === attacker || (o === 0 && map.terrain[t] === Terrain.Water)) return;
+    let tally = tallies.get(o);
+    if (!tally) tallies.set(o, (tally = { samples: 0, weight: 0, landmasses: new Set() }));
+    if (tally.samples >= estimateSamples) return;
+    tally.samples++;
+    const terrain = terrainCost[map.terrain[t]];
+    if (o === 0) {
+      tally.weight += terrain;
+      tally.landmasses.add(map.landmass[t]);
+    } else tally.weight += terrain * defenseMultiplier(game, t);
+  };
+  for (const b of game.nations[attacker].border) forEachNeighbor(map, b, visit);
+  cache.byAttacker.set(attacker, tallies);
+  return tallies;
 }
 
 /** tileCaptureCost with the owner's density supplied by the caller (ignored on unowned land). */
@@ -113,21 +149,9 @@ function captureCostAt(game: Game, tile: TileIndex, ownerDensity: number): numbe
   return t * (baseCost + ownerDensity * densityFactor) * defenseMultiplier(game, tile);
 }
 
-/**
- * The number of unowned tiles on `landmasses`, capped at `cap`. Skips the full-map count when the landmasses are
- * big enough that, even if every owned tile on the map lay on them, at least `cap` would still be unowned.
- */
+/** The number of unowned land tiles on `landmasses`, capped at `cap`. */
 function unownedLandOn(game: Game, landmasses: ReadonlySet<number>, cap: number): number {
-  let size = 0;
-  for (const id of landmasses) size += game.map.landmassSize[id];
-  let owned = 0;
-  for (const n of game.nations) owned += n.tiles;
-  if (size - owned >= cap) return cap;
-
-  const { landmass } = game.map;
-  let count = 0;
-  for (let t = 0; t < game.owner.length; t++) {
-    if (game.owner[t] === 0 && landmasses.has(landmass[t])) count++;
-  }
-  return Math.min(count, cap);
+  let free = 0;
+  for (const id of landmasses) free += game.unownedLand[id];
+  return Math.min(free, cap);
 }

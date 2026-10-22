@@ -69,8 +69,9 @@ export const CONFIG = {
         // building placement: own tiles sampled for interior spots (from a search of this many tiles around the
         // centroid), border tiles sampled, and how far inland front defenses sit
         interiorSamples: 60, interiorSearch: 600, borderSamples: 200, frontInset: 3,
-        // sea invasions: distance (tiles) that halves a target's appeal, and coastal tiles sampled per water body
-        invasionDistanceScale: 100, invasionCoastSamples: 3000,
+        // sea invasions: distance (tiles) that halves a target's appeal, coastal tiles sampled per water body, our
+        // coastal border tiles measured from, and how long a scan of overseas targets is reused
+        invasionDistanceScale: 100, invasionCoastSamples: 3000, invasionShoreSamples: 24, overseasRefreshTicks: 60,
         // naval defense: how long an invasion by sea keeps a bot alert, how much it values a naval base meanwhile,
         // and how many warships it keeps per naval base
         navalThreatTicks: 600, navalUrgency: 60, warshipsPerBase: 2,

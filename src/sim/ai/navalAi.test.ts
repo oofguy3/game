@@ -51,6 +51,17 @@ describe('chooseInvasion', () => {
     expect(chooseInvasion(g, perceive(g, 1), bot)).toBeNull();
   });
 
+  it('re-checks a remembered target before sending a boat to it', () => {
+    const g = islands();
+    const bot = new Bot(g, 1, 'hard', 'aggressive', SEED);
+    const first = chooseInvasion(g, perceive(g, 1), bot) as Extract<Command, { type: 'boat' }>;
+    expect(first).toMatchObject({ type: 'boat' });
+    // a takes the far island by other means before its next decision
+    for (let y = 1; y <= 3; y++) for (let x = 10; x <= 12; x++) g.setOwner(tileOf(g.map, x, y), 1);
+    g.tick += 1;
+    expect(chooseInvasion(g, perceive(g, 1), bot)).toBeNull();
+  });
+
   it('waits below the troop band', () => {
     const g = islands();
     g.nations[1].troops = 100;
