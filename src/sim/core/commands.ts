@@ -1,4 +1,5 @@
 import type { Command, NationId, Phase } from '../../shared/types';
+import { attackCommand } from '../systems/attacks';
 import { spawnNation } from '../systems/spawn';
 import type { Game } from './game';
 
@@ -43,7 +44,10 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
       const result = spawnNation(game, game.nations[nation], cmd.tile);
       return result.ok ? result : reject(game, nation, result.reason);
     }
-    case 'attack':
+    case 'attack': {
+      const result = attackCommand(game, cmd);
+      return result.ok ? result : reject(game, nation, result.reason);
+    }
     case 'boat':
     case 'build':
     case 'buildUnit':

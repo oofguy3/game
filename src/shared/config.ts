@@ -13,7 +13,10 @@ export const CONFIG = {
   troops: { baseMax: 5000, perTile: 40, baseGrowth: 2, growthRate: 0.02, overMaxDecay: 0.01 },
   gold: { base: 1, perTile: 0.02 },
   combat: { terrainCost: [0, 1.0, 1.5, 2.5], neutralCost: 2, baseCost: 3, densityFactor: 1.2,
-            defenderLossFactor: 1, frontFraction: 0.25, minTilesPerTick: 1, maxTilesPerTick: 80 },
+            defenderLossFactor: 1, frontFraction: 0.25, minTilesPerTick: 1, maxTilesPerTick: 80,
+            // smallest share of troops an attack command sends; random tie-break added to frontier priorities;
+            // frontier tiles estimateConquest averages over
+            minAttackRatio: 0.01, frontierJitter: 0.5, estimateSamples: 64 },
   buildings: {
     minSpacing: 3, costGrowth: 1,
     city: { cost: 1000, buildTicks: 50, maxTroops: 25000 },

@@ -284,11 +284,12 @@ describe('applyCommand', () => {
 
   it('rejects every other command type as not implemented, with one event each', () => {
     const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
-    for (const cmd of GAMEPLAY_COMMANDS) {
+    const unimplemented = GAMEPLAY_COMMANDS.filter((cmd) => cmd.type !== 'attack');
+    for (const cmd of unimplemented) {
       expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'not implemented' });
     }
     const events = g.drainEvents();
-    expect(events).toHaveLength(GAMEPLAY_COMMANDS.length);
+    expect(events).toHaveLength(unimplemented.length);
     expect(events.every((e) => e.type === 'rejected' && e.nation === 1 && e.reason === 'not implemented')).toBe(true);
   });
 });

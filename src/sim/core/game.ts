@@ -7,6 +7,8 @@ import type { GameMap } from '../map/gameMap';
 import { forEachNeighbor, xOf, yOf } from '../map/grid';
 import { buildWaterNav } from '../map/waterNav';
 import type { WaterNav } from '../map/waterNav';
+import { stepAttacks } from '../systems/attacks';
+import type { Attack } from '../systems/attacks';
 import { Relations } from '../systems/relations';
 import { endSpawnPhase } from '../systems/spawn';
 import { Rng } from '../util/rng';
@@ -59,6 +61,8 @@ export class Game {
   /** The human player's nation id, or 0 when there is no player. */
   playerId: NationId;
   relations: Relations;
+  /** Running attacks, in the order they started. */
+  attacks: Attack[] = [];
   /** Called after each ownership change, once the game state is already updated. */
   onOwnerChange: ((tile: TileIndex, from: NationId, to: NationId) => void)[] = [];
 
@@ -110,7 +114,8 @@ export class Game {
 
   /**
    * Applies the queued commands in order, then advances the clock by one tick. In the spawn phase that is all it does,
-   * except that the phase ends (random starts for everyone left) once the clock reaches `spawnEndsAt`.
+   * except that the phase ends (random starts for everyone left) once the clock reaches `spawnEndsAt`. While playing,
+   * the attacks advance before the clock does.
    */
   step(): void {
     const commands = this.pending;
@@ -121,6 +126,7 @@ export class Game {
       if (this.tick >= this.spawnEndsAt) endSpawnPhase(this);
       return;
     }
+    if (this.phase === 'playing') stepAttacks(this);
     this.tick++;
   }
 
