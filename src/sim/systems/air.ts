@@ -281,8 +281,47 @@ function moveTowards(u: Unit, x: number, y: number, speed: number): void {
   }
 }
 
-/** How much radar coverage sharpens `owner`'s air defense at (x, y): 1 without radar. Filled in by Task 22. */
+/** How much radar coverage sharpens `owner`'s air defense at (x, y): `radar.boost` within an active radar's radius, else 1. */
 export function radarBoost(game: Game, owner: NationId, x: number, y: number): number {
-  void game; void owner; void x; void y;
+  const { radius, boost } = CONFIG.buildings.radar;
+  for (const r of game.buildings.ofNation(owner, 'radar')) {
+    if (r.ticksLeft === 0 && Math.hypot(xOf(game.map, r.tile) - x, yOf(game.map, r.tile) - y) <= radius) return boost;
+  }
   return 1;
+}
+
+/**
+ * Every active anti-air gun fires at each plane within its radius whose owner is at war with the gun's: 1 damage with
+ * `hitChance` × the radar boost at the plane. Trade planes too.
+ */
+export function stepAntiAir(game: Game): void {
+  const { radius, hitChance } = CONFIG.buildings.antiAir;
+  for (const gun of game.buildings.byId.values()) {
+    if (gun.type !== 'antiAir' || gun.ticksLeft > 0) continue;
+    const gx = xOf(game.map, gun.tile);
+    const gy = yOf(game.map, gun.tile);
+    for (const u of [...game.units.values()]) {
+      if (!PLANES.has(u.type) || !game.units.has(u.id) || game.relations.get(gun.owner, u.owner) !== 'war') continue;
+      if (Math.hypot(u.x - gx, u.y - gy) > radius) continue;
+      if (!game.rng.chance(hitChance * radarBoost(game, gun.owner, u.x, u.y))) continue;
+      u.hp -= 1;
+      if (u.hp <= 0) removeUnit(game, u.id, gun.owner);
+    }
+  }
+}
+
+/** A foreign, non-allied bomber or paratroop plane inside one of a nation's active radars warns it, once per plane. */
+export function stepRadarWarnings(game: Game): void {
+  const { radius } = CONFIG.buildings.radar;
+  for (const u of game.units.values()) {
+    if (u.type !== 'bomber' && u.type !== 'paraPlane') continue;
+    for (const r of game.buildings.byId.values()) {
+      if (r.type !== 'radar' || r.ticksLeft > 0 || r.owner === u.owner || u.warned.has(r.owner)) continue;
+      if (game.relations.get(r.owner, u.owner) === 'allied') continue;
+      if (Math.hypot(u.x - xOf(game.map, r.tile), u.y - yOf(game.map, r.tile)) > radius) continue;
+      u.warned.add(r.owner);
+      const tile = tileOf(game.map, Math.round(u.x), Math.round(u.y));
+      game.emit({ type: 'radarWarning', nation: r.owner, from: u.owner, unit: u.type, tile });
+    }
+  }
 }

@@ -2,7 +2,7 @@ import type { NationId, TileIndex, UnitType } from '../../shared/types';
 import type { Game } from '../core/game';
 import type { GameMap } from '../map/gameMap';
 import { xOf, yOf } from '../map/grid';
-import { spawnTradePlanes, stepPlane } from './air';
+import { spawnTradePlanes, stepAntiAir, stepPlane, stepRadarWarnings } from './air';
 import { spawnTradeShips, stepTradeShip, stepTroopBoat, stepWarship } from './naval';
 
 /** Anything that moves over the map: boats, ships and planes. Positions are in tile coordinates. */
@@ -87,6 +87,8 @@ export function stepUnits(game: Game): void {
     else if (u.type === 'warship') stepWarship(game, u);
     else stepPlane(game, u);
   }
+  stepRadarWarnings(game);
+  stepAntiAir(game);
 }
 
 /** Length of the polyline through `path`'s waypoints, in tiles. */
