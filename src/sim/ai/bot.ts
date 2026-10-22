@@ -1,6 +1,7 @@
 import type { Command, Difficulty, NationId, Personality, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
 import { Rng } from '../util/rng';
+import { chooseBuild } from './economy';
 import { chooseAttack } from './military';
 import { perceive } from './perception';
 import { DIFFICULTY, PERSONALITY } from './profile';
@@ -67,6 +68,8 @@ export class Bot {
   protected decide(): Command[] {
     const p = perceive(this.game, this.id);
     const commands: Command[] = [];
+    const build = chooseBuild(this.game, p, this);
+    if (build) commands.push(build);
     const attack = chooseAttack(this.game, p, this);
     if (attack) commands.push(attack);
     return commands;

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CONFIG } from '../shared/config';
 import type { Command, Difficulty } from '../shared/types';
 import { Bot } from './ai/bot';
 import { DIFFICULTY, PERSONALITIES, PERSONALITY } from './ai/profile';
@@ -56,13 +57,14 @@ describe('Match', () => {
     const m = new Match(setup({ bots: botsOf('insane'), debug: true }));
     const grant: Command = { type: 'debugGrant', nation: 1, gold: 10 };
     vi.spyOn(m.bots[0], 'think').mockReturnValue([grant]);
-    m.step();
-    expect(m.game.nations[1].gold).toBe(0);
+    const start = CONFIG.spawn.startGold;
+    m.step(); // tick 0: the bot spawns (setting its gold) but doesn't think
+    expect(m.game.nations[1].gold).toBe(start);
     m.step(); // tick 1: (1 + 7) % 4 === 0
-    expect(m.game.nations[1].gold).toBe(10);
+    expect(m.game.nations[1].gold).toBe(start + 10);
     for (let i = 0; i < 6; i++) m.step();
-    expect(m.game.nations[1].gold).toBe(20);
-    expect(m.game.drainEvents()).toEqual([]);
+    expect(m.game.nations[1].gold).toBe(start + 20);
+    expect(m.game.drainEvents().filter((e) => e.type !== 'spawned')).toEqual([]);
   });
 
   it('drops any command a bot issues for another nation', () => {
@@ -72,9 +74,10 @@ describe('Match', () => {
     vi.spyOn(m.bots[0], 'think').mockReturnValue([forPlayer, forSelf]);
     const queue = vi.spyOn(m.game, 'queue');
     for (let i = 0; i < 3; i++) m.step(); // bot 2 thinks at tick 2: (2 + 14) % 4 === 0
-    expect(queue.mock.calls).toEqual([[forSelf]]);
+    // besides its spawn at tick 0, only the bot's command for itself is queued
+    expect(queue.mock.calls.filter(([c]) => c.type !== 'spawn')).toEqual([[forSelf]]);
     expect(m.game.nations[1].gold).toBe(0);
-    expect(m.game.nations[2].gold).toBe(5);
+    expect(m.game.nations[2].gold).toBe(CONFIG.spawn.startGold + 5);
   });
 
   it('issues no bot commands outside the playing phase', () => {
@@ -111,7 +114,8 @@ describe('Match', () => {
     m.queuePlayer(cmd);
     m.step();
     expect(m.game.nations[1].gold).toBe(50);
-    expect(m.game.nations[2].gold).toBe(0);
+    // the bot only got its spawn's starting gold
+    expect(m.game.nations[2].gold).toBe(CONFIG.spawn.startGold);
     expect(cmd.nation).toBe(2);
   });
 
@@ -119,8 +123,9 @@ describe('Match', () => {
     const m = new Match(setup({ debug: true }));
     m.queuePlayer({ type: 'debugGrant', nation: 1, gold: 50 });
     m.step();
-    expect(m.game.nations[1].gold).toBe(0);
-    expect(m.game.drainEvents()).toEqual([]);
+    // bot 1 only got its spawn's starting gold
+    expect(m.game.nations[1].gold).toBe(CONFIG.spawn.startGold);
+    expect(m.game.drainEvents().filter((e) => e.type !== 'spawned')).toEqual([]);
   });
 
   it('creates one bot per bot nation with its difficulty profile and personality weights', () => {

@@ -51,6 +51,18 @@ export const CONFIG = {
         // share of the troops above the reserve sent into free land while inside the troop band
         expandShare: 0.5,
         // a counterattack sends this many troops per troop attacking us
-        counterattackFactor: 1.1 },
+        counterattackFactor: 1.1,
+        // spawn choice: landmass size worth full marks (and their weight), spacing multiples worth full marks, the
+        // radius and weight of the plains share, and random draws allowed per wanted sample
+        spawnLandmassTarget: 2000, spawnLandmassWeight: 2, spawnSpacingReach: 3, spawnPlainsRadius: 6,
+        spawnPlainsWeight: 0.5, spawnDrawsPerSample: 20, spawnMinDraws: 2000,
+        // building plans: ticks of income a per-tick benefit is counted over; how much a stronger enemy at the
+        // border boosts defenses
+        buildHorizonTicks: 600, defenseUrgency: 4,
+        // a neutral neighbour this many times stronger than us counts as a threat to build defenses against
+        strongNeutralThreat: 1.5,
+        // building placement: own tiles sampled for interior spots (from a search of this many tiles around the
+        // centroid), border tiles sampled, and how far inland front defenses sit
+        interiorSamples: 60, interiorSearch: 600, borderSamples: 200, frontInset: 3 },
   client: { labelEveryTicks: 20, maxCatchUpTicks: 8 },
 } as const;

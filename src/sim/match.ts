@@ -1,6 +1,7 @@
 import type { Command } from '../shared/types';
 import { Bot } from './ai/bot';
 import { PERSONALITIES } from './ai/profile';
+import { chooseSpawn } from './ai/spawn';
 import { Game } from './core/game';
 import type { GameSetup } from './core/game';
 import { Rng } from './util/rng';
@@ -38,6 +39,7 @@ export class Match {
    */
   step(): void {
     const { game } = this;
+    if (game.phase === 'spawn' && !this.botsSpawned) this.spawnBots();
     for (const bot of this.bots) {
       if (!game.nations[bot.id].alive) continue;
       if ((game.tick + bot.id * THINK_STAGGER) % bot.profile.reactionTicks !== 0) continue;
@@ -46,6 +48,23 @@ export class Match {
       }
     }
     game.step();
+  }
+
+  private botsSpawned = false;
+
+  /**
+   * At the start of the spawn phase every bot picks its start (each keeping clear of the picks made before it) and
+   * queues a spawn command. A bot that finds nowhere is spawned at random when the phase ends.
+   */
+  private spawnBots(): void {
+    this.botsSpawned = true;
+    const picked: number[] = [];
+    for (const bot of this.bots) {
+      const tile = chooseSpawn(this.game, bot.id, bot.profile, bot.rng, picked);
+      if (tile === null) continue;
+      picked.push(tile);
+      this.game.queue({ type: 'spawn', nation: bot.id, tile });
+    }
   }
 
   /** Queues `cmd` on behalf of the human player, whatever nation it names; without a player it does nothing. */
