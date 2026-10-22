@@ -58,6 +58,11 @@ export class Bot {
   /** The commands this bot issues now, all on its own behalf. Bots act only while the game is being played. */
   think(): Command[] {
     if (this.game.phase !== 'playing') return [];
+    return this.decide();
+  }
+
+  /** The decisions themselves, made only while the game is being played. */
+  protected decide(): Command[] {
     // Tasks 12 onward add the decision modules here.
     return [];
   }

@@ -33,14 +33,17 @@ export class Match {
 
   /**
    * One tick: every living bot whose turn it is — (tick + id × `THINK_STAGGER`) a multiple of its `reactionTicks` —
-   * thinks and its commands are queued, then the game steps.
+   * thinks and its commands are queued, then the game steps. A bot acts only as itself: a command it issues for any
+   * other nation is dropped.
    */
   step(): void {
     const { game } = this;
     for (const bot of this.bots) {
       if (!game.nations[bot.id].alive) continue;
       if ((game.tick + bot.id * THINK_STAGGER) % bot.profile.reactionTicks !== 0) continue;
-      for (const cmd of bot.think()) game.queue(cmd);
+      for (const cmd of bot.think()) {
+        if (cmd.nation === bot.id) game.queue(cmd);
+      }
     }
     game.step();
   }

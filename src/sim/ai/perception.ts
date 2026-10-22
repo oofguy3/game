@@ -17,7 +17,7 @@ export interface NeighborInfo {
   relation: Relation;
   /** Average defense multiplier over the first `CONFIG.ai.defenseSamples` of the neighbour's tiles touching me. */
   defense: number;
-  /** Nations other than me the neighbour is at war with. */
+  /** Living nations other than me the neighbour is at war with. */
   otherWars: number;
   /** Troops in the neighbour's running attacks on me. */
   attackingMe: number;
@@ -47,7 +47,7 @@ export interface Perception {
   neighbors: NeighborInfo[];
   /** Troops in every running attack on me. */
   incoming: number;
-  /** Nations at war with me, in id order. */
+  /** Living nations at war with me, in id order. */
   wars: NationId[];
   /** The most troops any neighbour at war with me has; 0 when none. */
   threat: number;
@@ -76,6 +76,8 @@ export function perceive(game: Game, me: NationId): Perception {
   const { map, owner, relations } = game;
   const nation = game.nations[me];
   const { defenseSamples } = CONFIG.ai;
+  // a war outlives an eliminated nation in the relations table, but is no longer a front
+  const livingWarsOf = (id: NationId): NationId[] => relations.warsOf(id).filter((w) => game.nations[w].alive);
 
   const seen = new Set<TileIndex>();
   const tallies = new Map<NationId, BorderTally>();
@@ -128,7 +130,7 @@ export function perceive(game: Game, me: NationId): Perception {
       density: density(n),
       relation,
       defense: tally.defenseSamples > 0 ? tally.defenseSum / tally.defenseSamples : 1,
-      otherWars: relations.warsOf(id).filter((w) => w !== me).length,
+      otherWars: livingWarsOf(id).filter((w) => w !== me).length,
       attackingMe: attackingMe.get(id) ?? 0,
       buildings: game.buildings.ofNation(id).length,
     });
@@ -155,7 +157,7 @@ export function perceive(game: Game, me: NationId): Perception {
     neutralBorder,
     neighbors,
     incoming,
-    wars: relations.warsOf(me),
+    wars: livingWarsOf(me),
     threat,
     leader,
     leaderShare: game.nations[leader].tiles / land,

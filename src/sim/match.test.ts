@@ -19,6 +19,13 @@ const setup = (overrides: Partial<GameSetup> = {}): GameSetup => ({
 
 const botsOf = (...levels: Difficulty[]): GameSetup['bots'] => levels.map((difficulty) => ({ difficulty }));
 
+/** A bot that, whenever it gets to decide, grants itself 1 gold. */
+class EagerBot extends Bot {
+  protected override decide(): Command[] {
+    return [{ type: 'debugGrant', nation: this.id, gold: 1 }];
+  }
+}
+
 describe('Match', () => {
   it('Match runs bots on their reaction cadence', () => {
     const m = new Match(setup({ bots: botsOf('easy', 'normal', 'hard', 'insane') }));
@@ -56,6 +63,38 @@ describe('Match', () => {
     for (let i = 0; i < 6; i++) m.step();
     expect(m.game.nations[1].gold).toBe(20);
     expect(m.game.drainEvents()).toEqual([]);
+  });
+
+  it('drops any command a bot issues for another nation', () => {
+    const m = new Match(setup({ player: { name: 'You' }, bots: botsOf('insane'), debug: true }));
+    const forPlayer: Command = { type: 'debugGrant', nation: 1, gold: 10 };
+    const forSelf: Command = { type: 'debugGrant', nation: 2, gold: 5 };
+    vi.spyOn(m.bots[0], 'think').mockReturnValue([forPlayer, forSelf]);
+    const queue = vi.spyOn(m.game, 'queue');
+    for (let i = 0; i < 3; i++) m.step(); // bot 2 thinks at tick 2: (2 + 14) % 4 === 0
+    expect(queue.mock.calls).toEqual([[forSelf]]);
+    expect(m.game.nations[1].gold).toBe(0);
+    expect(m.game.nations[2].gold).toBe(5);
+  });
+
+  it('issues no bot commands outside the playing phase', () => {
+    // victory off: a lone bot would otherwise win as the last nation standing the moment play starts
+    const s = setup({ bots: botsOf('insane'), debug: true, checkVictory: false });
+    const m = new Match(s);
+    m.bots[0] = new EagerBot(m.game, 1, 'insane', 'aggressive', s.seed);
+    const queue = vi.spyOn(m.game, 'queue');
+    const grant: Command = { type: 'debugGrant', nation: 1, gold: 1 };
+
+    while (m.game.phase === 'spawn') m.step();
+    expect(queue).not.toHaveBeenCalledWith(grant);
+
+    for (let i = 0; i < 4; i++) m.step();
+    expect(queue).toHaveBeenCalledWith(grant);
+
+    queue.mockClear();
+    m.game.phase = 'ended';
+    for (let i = 0; i < 4; i++) m.step();
+    expect(queue).not.toHaveBeenCalledWith(grant);
   });
 
   it('dead bots do not think', () => {
@@ -137,7 +176,8 @@ describe('Bot', () => {
 
   it('issues no commands outside the playing phase', () => {
     const g = makeTestGame({ map: ['####'], owners: ['aa..'], nations: [{ troops: 5000 }] });
-    const bot = new Bot(g, 1, 'insane', 'aggressive', 3);
+    const bot = new EagerBot(g, 1, 'insane', 'aggressive', 3);
+    expect(bot.think()).toEqual([{ type: 'debugGrant', nation: 1, gold: 1 }]);
     for (const phase of ['spawn', 'ended'] as const) {
       g.phase = phase;
       expect(bot.think()).toEqual([]);

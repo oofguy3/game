@@ -5,10 +5,11 @@ import { applyCommand } from '../core/commands';
 import type { Game } from '../core/game';
 import { tileOf } from '../map/grid';
 import { makeTestGame } from '../testing/fixtures';
-import { startAttack } from '../systems/attacks';
+import { startAttack, stepAttacks } from '../systems/attacks';
 import { stepBuildings } from '../systems/buildings';
 import { defenseMultiplier } from '../systems/combat';
 import { goldIncome, maxTroops, troopGrowth } from '../systems/economy';
+import { declareWar } from '../systems/relations';
 import { perceive } from './perception';
 
 /** `height` rows of `width` characters, each one `cell(x, y)`. */
@@ -95,6 +96,26 @@ describe('perceive', () => {
       expect.objectContaining({ id: 1, relation: 'war', otherWars: 1, attackingMe: 0 }),
       expect.objectContaining({ id: 3, relation: 'war', otherWars: 1, attackingMe: 40 }),
     ]);
+  });
+
+  it('forgets wars with eliminated nations', () => {
+    // a (1) is at war with c (3) on its left and with d (4) beyond b (2)
+    const g = makeTestGame({
+      map: ['########'],
+      owners: ['cabbbbbd'],
+      nations: [{ troops: 1000 }, { troops: 500 }, { troops: 1 }, { troops: 500 }],
+    });
+    declareWar(g, 1, 4);
+    expect(startAttack(g, 1, 3, 500)).toEqual({ ok: true });
+    expect(perceive(g, 1).wars).toEqual([3, 4]);
+    expect(perceive(g, 2).neighbors[0]).toMatchObject({ id: 1, otherWars: 2 });
+
+    for (let i = 0; i < 100 && g.nations[3].alive; i++) stepAttacks(g);
+    expect(g.nations[3].alive).toBe(false);
+    // the war itself stands; perception just no longer counts the dead
+    expect(g.relations.get(1, 3)).toBe('war');
+    expect(perceive(g, 1).wars).toEqual([4]);
+    expect(perceive(g, 2).neighbors[0]).toMatchObject({ id: 1, otherWars: 1 });
   });
 
   it('threat counts only neighbours at war with me', () => {
