@@ -18,6 +18,7 @@
     "simplex-noise": "4.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/node": "26.6.5",
     "@types/topojson-client": "3.1.5",
     "topojson-client": "3.1.0",

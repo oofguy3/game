@@ -42,11 +42,12 @@ export class Camera {
     this.clamp();
   }
 
-  /** Zooms to show the whole map, centred. */
-  fitMap(): void {
-    this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(this.viewW / this.mapW, this.viewH / this.mapH)));
+  /** Zooms to show the whole map, centred in the screen above a bar `bottomInset` pixels tall. */
+  fitMap(bottomInset = 0): void {
+    const freeH = Math.max(1, this.viewH - bottomInset);
+    this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(this.viewW / this.mapW, freeH / this.mapH)));
     this.x = (this.mapW - this.viewW / this.zoom) / 2;
-    this.y = (this.mapH - this.viewH / this.zoom) / 2;
+    this.y = (this.mapH - freeH / this.zoom) / 2;
   }
 
   /** Keeps the screen's centre over the map, so it can't be dragged out of sight. */

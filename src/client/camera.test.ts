@@ -43,6 +43,14 @@ describe('Camera', () => {
     expect((topLeft.y + bottomRight.y) / 2).toBeCloseTo(300, 9);
   });
 
+  it('fitMap can keep the map clear of a bar along the bottom', () => {
+    const cam = new Camera(800, 600, 400, 400);
+    cam.fitMap(200);
+    expect(cam.zoom).toBeCloseTo(1, 9); // 400 px of free height for 400 tiles
+    expect(cam.tileToScreen(0, 0).y).toBeCloseTo(0, 9);
+    expect(cam.tileToScreen(400, 400).y).toBeCloseTo(400, 9);
+  });
+
   it('pan moves the view with the drag', () => {
     const cam = new Camera(800, 600, 400, 250);
     cam.fitMap();
