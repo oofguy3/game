@@ -94,7 +94,7 @@ describe('Game construction', () => {
     for (const n of real.slice(1)) expect(n.color).toBe(nationColor(n.id, false));
   });
 
-  it('names and colors depend only on the seed', () => {
+  it('names depend only on the seed', () => {
     const make = (seed: number) => new Game({ map: mapFromAscii(['##']), seed, player: null, bots: [{ difficulty: 'easy' }, { difficulty: 'easy' }, { difficulty: 'easy' }] });
     const names = (g: Game) => g.nations.map((n) => n.name);
     expect(names(make(5))).toEqual(names(make(5)));
@@ -354,53 +354,50 @@ describe('nationNames', () => {
 });
 
 describe('nationColor', () => {
-  const hueOf = (rgb: number): number => {
-    const r = ((rgb >> 16) & 255) / 255, g = ((rgb >> 8) & 255) / 255, b = (rgb & 255) / 255;
-    const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
-    if (d === 0) return 0;
-    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    return (h * 60 + 360) % 360;
+  const PLAYER = 0x3b82f6;
+  const rgbDistance = (a: number, b: number): number =>
+    Math.hypot(((a >> 16) & 255) - ((b >> 16) & 255), ((a >> 8) & 255) - ((b >> 8) & 255), (a & 255) - (b & 255));
+  const minPairwiseDistance = (colors: number[]): number => {
+    let min = Infinity;
+    for (let i = 0; i < colors.length; i++) {
+      for (let j = i + 1; j < colors.length; j++) min = Math.min(min, rgbDistance(colors[i], colors[j]));
+    }
+    return min;
   };
+  const botColors = (firstId: number, count: number): number[] =>
+    Array.from({ length: count }, (_, i) => nationColor(firstId + i, false));
 
   it('the player is always blue', () => {
-    expect(nationColor(0, true)).toBe(0x3b82f6);
-    expect(nationColor(7, true)).toBe(0x3b82f6);
+    expect(nationColor(0, true)).toBe(PLAYER);
+    expect(nationColor(7, true)).toBe(PLAYER);
   });
 
   it('bots get valid, repeatable 24-bit colors', () => {
-    for (let i = 1; i <= 40; i++) {
+    for (let i = 1; i <= 41; i++) {
       const c = nationColor(i, false);
       expect(Number.isInteger(c) && c >= 0 && c <= 0xffffff).toBe(true);
       expect(nationColor(i, false)).toBe(c);
     }
   });
 
-  it('the first 40 bot colors are all different from each other and from the player', () => {
-    const colors = Array.from({ length: 40 }, (_, i) => nationColor(i + 1, false));
+  it('the player and bot ids 1..40 are all clearly different in RGB space', () => {
+    expect(minPairwiseDistance([PLAYER, ...botColors(1, 40)])).toBeGreaterThanOrEqual(50);
+  });
+
+  it('with a player present, bot ids 2..41 get 40 distinct colors, none the player\'s', () => {
+    const colors = botColors(2, 40);
     expect(new Set(colors).size).toBe(40);
-    expect(colors).not.toContain(0x3b82f6);
+    expect(colors).not.toContain(PLAYER);
+    expect(minPairwiseDistance([PLAYER, ...colors])).toBeGreaterThanOrEqual(50);
   });
 
-  it('uses the golden angle with 65% saturation and 52% lightness', () => {
-    // index 1 -> hue 137.508 degrees, a mid green.
-    const c = nationColor(1, false);
-    const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
-    expect(hueOf(c)).toBeCloseTo(137.508, 0);
-    const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 2 / 255;
-    expect(lightness).toBeCloseTo(0.52, 2);
+  it('without a player, bot ids 1..40 get 40 distinct colors', () => {
+    expect(new Set(botColors(1, 40)).size).toBe(40);
   });
 
-  it('keeps bot hues more than 12 degrees away from the player blue', () => {
-    for (let i = 1; i <= 300; i++) {
-      const h = hueOf(nationColor(i, false));
-      const diff = Math.abs(((h - 217 + 540) % 360) - 180);
-      expect(diff).toBeGreaterThan(11); // 1 degree of slack for 8-bit rounding
-    }
-  });
-
-  it('shifts a hue that would land near the player blue by 30 degrees', () => {
-    // 137.508 * 6 mod 360 = 105.05 and * 12 mod 360 = 210.1: the latter is inside the +-12 band.
-    expect(hueOf(nationColor(12, false))).toBeCloseTo(240.1, 0);
+  it('the palette repeats after 40 bots', () => {
+    expect(nationColor(41, false)).toBe(nationColor(1, false));
+    expect(nationColor(80, false)).toBe(nationColor(40, false));
   });
 });
 
