@@ -8,6 +8,7 @@ import { forEachNeighbor, xOf, yOf } from '../map/grid';
 import { buildWaterNav } from '../map/waterNav';
 import type { WaterNav } from '../map/waterNav';
 import { Relations } from '../systems/relations';
+import { endSpawnPhase } from '../systems/spawn';
 import { Rng } from '../util/rng';
 import { applyCommand } from './commands';
 import { nationNames } from './names';
@@ -25,6 +26,16 @@ export interface GameSetup {
   checkVictory?: boolean;
 }
 
+/**
+ * How far apart nations should start: the side of a square holding 1/`spacingSharesPerNation` of one nation's fair
+ * share of the land, kept between `minDistanceFloor` and `minDistance`. With no nations there is no crowding.
+ */
+function spawnSpacingFor(landCount: number, nationCount: number): number {
+  const { minDistance, minDistanceFloor, spacingSharesPerNation } = CONFIG.spawn;
+  if (nationCount === 0) return minDistance;
+  return Math.max(minDistanceFloor, Math.min(minDistance, Math.sqrt(landCount / (nationCount * spacingSharesPerNation))));
+}
+
 const UNOWNED_NAME = 'Unowned';
 /** Salt for the Rng stream that names the bots, so naming never disturbs the game's own stream. */
 const NAMES_RNG_SALT = 1;
@@ -39,7 +50,8 @@ export class Game {
   phase: Phase = 'spawn';
   result: GameResult | null = null;
   spawnEndsAt: number;
-  spawnSpacing = 0;
+  /** Minimum distance between the spawns that nations choose; random spawns relax it when the map is crowded. */
+  spawnSpacing: number;
   /** Owning nation per tile; 0 = unowned. */
   owner: Uint16Array;
   /** Indexed by nation id; `nations[0]` is the placeholder for unowned land and is never alive. */
@@ -84,6 +96,7 @@ export class Game {
       }));
     });
     this.relations = new Relations(this.nations.length);
+    this.spawnSpacing = spawnSpacingFor(setup.map.landCount, this.nations.length - 1);
   }
 
   /** A fresh id for buildings, units, requests and the like; ids start at 1. */
@@ -95,11 +108,19 @@ export class Game {
     this.pending.push(cmd);
   }
 
-  /** Applies the queued commands in order, then advances the clock by one tick. */
+  /**
+   * Applies the queued commands in order, then advances the clock by one tick. In the spawn phase that is all it does,
+   * except that the phase ends (random starts for everyone left) once the clock reaches `spawnEndsAt`.
+   */
   step(): void {
     const commands = this.pending;
     this.pending = [];
     for (const cmd of commands) applyCommand(this, cmd);
+    if (this.phase === 'spawn') {
+      this.tick++;
+      if (this.tick >= this.spawnEndsAt) endSpawnPhase(this);
+      return;
+    }
     this.tick++;
   }
 

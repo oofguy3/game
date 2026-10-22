@@ -2,16 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { nationColor } from '../../shared/colors';
 import { CONFIG } from '../../shared/config';
 import { BUILDING_TYPES } from '../../shared/types';
-import type { Command, GameEvent, NationId, TileIndex } from '../../shared/types';
+import type { Command, GameEvent, NationId, Phase, TileIndex } from '../../shared/types';
 import { tileOf } from '../map/grid';
 import { mapFromAscii } from '../testing/asciiMap';
 import { makeTestGame } from '../testing/fixtures';
 import { Rng } from '../util/rng';
 import { applyCommand } from './commands';
+import type { CommandResult } from './commands';
 import { Game } from './game';
 import { nationNames } from './names';
 
 const rejections = (events: GameEvent[]) => events.filter((e) => e.type === 'rejected');
+
+/** One well-formed command of every type except `spawn` and `debugGrant`, all on behalf of nation 1. */
+const GAMEPLAY_COMMANDS: Command[] = [
+  { type: 'attack', nation: 1, tile: 1, ratio: 0.5 },
+  { type: 'boat', nation: 1, tile: 1, ratio: 0.5 },
+  { type: 'build', nation: 1, building: 'city', tile: 0 },
+  { type: 'buildUnit', nation: 1, unit: 'warship', buildingId: 1 },
+  { type: 'moveUnit', nation: 1, unitId: 1, tile: 1 },
+  { type: 'bomb', nation: 1, tile: 1 },
+  { type: 'paradrop', nation: 1, tile: 1, ratio: 0.5 },
+  { type: 'proposeAlliance', nation: 1, to: 1 },
+  { type: 'breakAlliance', nation: 1, with: 1 },
+  { type: 'proposePeace', nation: 1, to: 1 },
+  { type: 'proposeDeal', nation: 1, to: 1, deal: { giveGold: 0, giveTroops: 0, getGold: 0, getTroops: 0 } },
+  { type: 'requestJointAttack', nation: 1, to: 1, target: 1 },
+  { type: 'respond', nation: 1, requestId: 1, accept: true },
+  { type: 'embargo', nation: 1, with: 1, on: true },
+];
+const SPAWN_COMMAND: Command = { type: 'spawn', nation: 1, tile: 1 };
+const GRANT_COMMAND: Command = { type: 'debugGrant', nation: 1, gold: 5 };
+
+const isWrongPhase = (r: CommandResult): boolean => !r.ok && r.reason === 'wrong phase';
 
 describe('Game construction', () => {
   it('player is nation 1, bots follow', () => {
@@ -64,7 +87,7 @@ describe('Game construction', () => {
     expect(g.tick).toBe(0);
     expect(g.result).toBeNull();
     expect(g.spawnEndsAt).toBe(CONFIG.spawn.phaseTicks);
-    expect(g.spawnSpacing).toBe(0);
+    expect(g.spawnSpacing).toBe(CONFIG.spawn.minDistance);
     expect(g.debug).toBe(false);
     expect(g.checkVictory).toBe(true);
     expect(g.owner).toBeInstanceOf(Uint16Array);
@@ -261,29 +284,60 @@ describe('applyCommand', () => {
 
   it('rejects every other command type as not implemented, with one event each', () => {
     const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
-    const cmds: Command[] = [
-      { type: 'spawn', nation: 1, tile: 1 },
-      { type: 'attack', nation: 1, tile: 1, ratio: 0.5 },
-      { type: 'boat', nation: 1, tile: 1, ratio: 0.5 },
-      { type: 'build', nation: 1, building: 'city', tile: 0 },
-      { type: 'buildUnit', nation: 1, unit: 'warship', buildingId: 1 },
-      { type: 'moveUnit', nation: 1, unitId: 1, tile: 1 },
-      { type: 'bomb', nation: 1, tile: 1 },
-      { type: 'paradrop', nation: 1, tile: 1, ratio: 0.5 },
-      { type: 'proposeAlliance', nation: 1, to: 1 },
-      { type: 'breakAlliance', nation: 1, with: 1 },
-      { type: 'proposePeace', nation: 1, to: 1 },
-      { type: 'proposeDeal', nation: 1, to: 1, deal: { giveGold: 0, giveTroops: 0, getGold: 0, getTroops: 0 } },
-      { type: 'requestJointAttack', nation: 1, to: 1, target: 1 },
-      { type: 'respond', nation: 1, requestId: 1, accept: true },
-      { type: 'embargo', nation: 1, with: 1, on: true },
-    ];
-    for (const cmd of cmds) {
+    for (const cmd of GAMEPLAY_COMMANDS) {
       expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'not implemented' });
     }
     const events = g.drainEvents();
-    expect(events).toHaveLength(cmds.length);
+    expect(events).toHaveLength(GAMEPLAY_COMMANDS.length);
     expect(events.every((e) => e.type === 'rejected' && e.nation === 1 && e.reason === 'not implemented')).toBe(true);
+  });
+});
+
+describe('applyCommand phase gating', () => {
+  const gameIn = (phase: Phase, debug = true) => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}, { alive: false }], debug });
+    g.phase = phase;
+    return g;
+  };
+
+  it('in the spawn phase only spawn and debugGrant are accepted', () => {
+    const g = gameIn('spawn');
+    for (const cmd of GAMEPLAY_COMMANDS) expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'wrong phase' });
+    expect(g.drainEvents()).toEqual(GAMEPLAY_COMMANDS.map(() => ({ type: 'rejected', nation: 1, reason: 'wrong phase' })));
+    expect(applyCommand(g, GRANT_COMMAND)).toEqual({ ok: true });
+    expect(g.nations[1].gold).toBe(5);
+    expect(applyCommand(g, SPAWN_COMMAND)).toEqual({ ok: true });
+    expect(g.nations[1].gold).toBe(CONFIG.spawn.startGold);
+  });
+
+  it('in the playing phase spawn is rejected and everything else reaches its handler', () => {
+    const g = gameIn('playing');
+    expect(applyCommand(g, SPAWN_COMMAND)).toEqual({ ok: false, reason: 'wrong phase' });
+    expect(g.drainEvents()).toEqual([{ type: 'rejected', nation: 1, reason: 'wrong phase' }]);
+    for (const cmd of GAMEPLAY_COMMANDS) expect(isWrongPhase(applyCommand(g, cmd))).toBe(false);
+    expect(applyCommand(g, GRANT_COMMAND)).toEqual({ ok: true });
+  });
+
+  it('in the ended phase every command is rejected, debugGrant included', () => {
+    const g = gameIn('ended');
+    const all = [SPAWN_COMMAND, GRANT_COMMAND, ...GAMEPLAY_COMMANDS];
+    for (const cmd of all) expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'wrong phase' });
+    expect(g.drainEvents()).toEqual(all.map(() => ({ type: 'rejected', nation: 1, reason: 'wrong phase' })));
+    expect(g.nations[1].gold).toBe(0);
+  });
+
+  it('checks the nation before the phase', () => {
+    for (const phase of ['spawn', 'playing', 'ended'] as const) {
+      const g = gameIn(phase);
+      expect(applyCommand(g, { ...SPAWN_COMMAND, nation: 9 })).toEqual({ ok: false, reason: 'unknown nation' });
+      expect(applyCommand(g, { ...GRANT_COMMAND, nation: 2 })).toEqual({ ok: false, reason: 'eliminated' });
+    }
+  });
+
+  it('gates on the phase before any command-specific validation; debugGrant still needs the debug flag', () => {
+    const g = gameIn('spawn', false);
+    expect(applyCommand(g, { type: 'attack', nation: 1, tile: 1e9, ratio: 2 })).toEqual({ ok: false, reason: 'wrong phase' });
+    expect(applyCommand(g, GRANT_COMMAND)).toEqual({ ok: false, reason: 'debug commands are disabled' });
   });
 });
 

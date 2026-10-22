@@ -2,7 +2,13 @@
 export const CONFIG = {
   tickMs: 100,
   map: { sizes: { small: [400, 250], medium: [800, 450], large: [1200, 650] }, landFraction: 0.4, mountainShare: 0.12, hillShare: 0.23, navCellSize: 8 },
-  spawn: { phaseTicks: 100, radius: 4, minDistance: 30, minDistanceFloor: 6, startTroops: 2500, startGold: 500 },
+  spawn: {
+    phaseTicks: 100, radius: 4, minDistance: 30, minDistanceFloor: 6, startTroops: 2500, startGold: 500,
+    // spacing = sqrt(landCount / (nations * spacingSharesPerNation)): the side of a square holding 1/n of a nation's fair share
+    spacingSharesPerNation: 4,
+    // random spawns: land tiles tried per spacing level, and the factor the spacing shrinks by when none qualifies
+    randomSamples: 2000, spacingRelax: 0.75,
+  },
   win: { landShare: 0.8 },
   troops: { baseMax: 5000, perTile: 40, baseGrowth: 2, growthRate: 0.02, overMaxDecay: 0.01 },
   gold: { base: 1, perTile: 0.02 },

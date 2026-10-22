@@ -1,4 +1,5 @@
-import type { Command, NationId } from '../../shared/types';
+import type { Command, NationId, Phase } from '../../shared/types';
+import { spawnNation } from '../systems/spawn';
 import type { Game } from './game';
 
 export type CommandResult = { ok: true } | { ok: false; reason: string };
@@ -6,6 +7,21 @@ export type CommandResult = { ok: true } | { ok: false; reason: string };
 function reject(game: Game, nation: NationId, reason: string): CommandResult {
   game.emit({ type: 'rejected', nation, reason });
   return { ok: false, reason };
+}
+
+/**
+ * Whether a command type may be applied in `phase`: nothing once the game has ended, only `spawn` (and the debug
+ * command) while nations choose their starts, and everything but `spawn` once play begins.
+ */
+function allowedInPhase(type: Command['type'], phase: Phase): boolean {
+  switch (phase) {
+    case 'spawn':
+      return type === 'spawn' || type === 'debugGrant';
+    case 'playing':
+      return type !== 'spawn';
+    case 'ended':
+      return false;
+  }
 }
 
 /**
@@ -18,11 +34,15 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
     return reject(game, nation, 'unknown nation');
   }
   if (!game.nations[nation].alive) return reject(game, nation, 'eliminated');
+  if (!allowedInPhase(cmd.type, game.phase)) return reject(game, nation, 'wrong phase');
 
   switch (cmd.type) {
     case 'debugGrant':
       return debugGrant(game, cmd);
-    case 'spawn':
+    case 'spawn': {
+      const result = spawnNation(game, game.nations[nation], cmd.tile);
+      return result.ok ? result : reject(game, nation, result.reason);
+    }
     case 'attack':
     case 'boat':
     case 'build':
