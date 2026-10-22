@@ -1,5 +1,6 @@
 import { CONFIG } from '../../shared/config';
 import type { Command, NationId, Phase } from '../../shared/types';
+import { buildFighter, launchBomber, launchParatroopers } from '../systems/air';
 import { attackCommand } from '../systems/attacks';
 import { build } from '../systems/buildings';
 import { buildWarship, launchBoat, moveWarship } from '../systems/naval';
@@ -61,16 +62,21 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
       return result.ok ? result : reject(game, nation, result.reason);
     }
     case 'buildUnit': {
-      if (cmd.unit !== 'warship') return reject(game, nation, 'not implemented');
-      const result = buildWarship(game, nation, cmd.buildingId);
+      const result = cmd.unit === 'warship' ? buildWarship(game, nation, cmd.buildingId) : buildFighter(game, nation, cmd.buildingId);
+      return result.ok ? result : reject(game, nation, result.reason);
+    }
+    case 'bomb': {
+      const result = launchBomber(game, nation, cmd.tile);
+      return result.ok ? result : reject(game, nation, result.reason);
+    }
+    case 'paradrop': {
+      const result = launchParatroopers(game, nation, cmd.tile, cmd.ratio);
       return result.ok ? result : reject(game, nation, result.reason);
     }
     case 'moveUnit': {
       const result = moveWarship(game, nation, cmd.unitId, cmd.tile);
       return result.ok ? result : reject(game, nation, result.reason);
     }
-    case 'bomb':
-    case 'paradrop':
     case 'proposeAlliance':
     case 'breakAlliance':
     case 'proposePeace':

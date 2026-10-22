@@ -11,7 +11,10 @@ export interface Building {
   tile: TileIndex;
   /** Ticks of construction left; 0 = active. */
   ticksLeft: number;
+  /** Ticks until it can act again: a port's next trade ship, an airport's next mission. */
   cooldown: number;
+  /** Airports only: ticks until the next trade plane (missions use `cooldown`). */
+  tradeTimer?: number;
 }
 
 /** Building types that must stand on a coastal tile. */

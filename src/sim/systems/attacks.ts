@@ -38,11 +38,11 @@ export function sharesBorder(game: Game, a: NationId, b: NationId): boolean {
  * one troop. The troops first cancel out against any attack the target has running against the attacker, both sides
  * losing the smaller amount; what is left joins the attacker's existing attack on the target, or starts a new one.
  * Either way every target tile touching the attacker's border or the seed tile joins the frontier, so land that has
- * come within reach since an attack began is taken too. Attacking a nation declares war on it. Reports the reason on
+ * come within reach since an attack began is taken too; with `seedOnly` (paratroopers) only the seed tile's. Attacking a nation declares war on it. Reports the reason on
  * failure without emitting `rejected`; `applyCommand` does that.
  */
 export function startAttack(
-  game: Game, attacker: NationId, target: NationId, troops: number, seedTile?: TileIndex,
+  game: Game, attacker: NationId, target: NationId, troops: number, seedTile?: TileIndex, seedOnly = false,
 ): CommandResult {
   if (target === attacker) return fail('own tile');
   if (target !== 0 && game.relations.get(attacker, target) === 'allied') return fail('allied');
@@ -65,7 +65,7 @@ export function startAttack(
     };
     game.attacks.push(attack);
   }
-  for (const b of game.nations[attacker].border) pushTargetNeighbours(game, attack, b);
+  if (!seedOnly) for (const b of game.nations[attacker].border) pushTargetNeighbours(game, attack, b);
   if (seedTile !== undefined) pushTargetNeighbours(game, attack, seedTile);
   return { ok: true };
 }
@@ -133,9 +133,9 @@ function reachableOverLand(game: Game, nation: NationId, tile: TileIndex): boole
 /**
  * Troops arriving at `tile` by sea or air. On the nation's own or an ally's tile they rejoin the pool. Anywhere else
  * they must pay the tile's capture cost (or are lost); the tile is taken and the rest attack its previous owner from
- * there. Landing on a nation's tile declares war on it.
+ * there (only from there with `seedOnly`). Landing on a nation's tile declares war on it.
  */
-export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops: number): void {
+export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops: number, seedOnly = false): void {
   const lander = game.nations[nation];
   if (!lander.alive) return;
   if (!isLand(game.map, tile)) {
@@ -155,7 +155,7 @@ export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops
   const rest = troops - cost;
   // the rest joins the pool; a new attack draws it straight back out
   lander.troops += rest;
-  if (rest >= 1 && (owner === 0 || game.nations[owner].alive)) startAttack(game, nation, owner, rest, tile);
+  if (rest >= 1 && (owner === 0 || game.nations[owner].alive)) startAttack(game, nation, owner, rest, tile, seedOnly);
 }
 
 /**

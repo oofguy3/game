@@ -2,6 +2,7 @@ import type { NationId, TileIndex, UnitType } from '../../shared/types';
 import type { Game } from '../core/game';
 import type { GameMap } from '../map/gameMap';
 import { xOf, yOf } from '../map/grid';
+import { spawnTradePlanes, stepPlane } from './air';
 import { spawnTradeShips, stepTradeShip, stepTroopBoat, stepWarship } from './naval';
 
 /** Anything that moves over the map: boats, ships and planes. Positions are in tile coordinates. */
@@ -78,11 +79,13 @@ export function advanceAlongPath(u: Unit, map: GameMap, speed: number): boolean 
 /** One tick for every unit, in the order they were created. */
 export function stepUnits(game: Game): void {
   spawnTradeShips(game);
+  spawnTradePlanes(game);
   for (const u of [...game.units.values()]) {
     if (!game.units.has(u.id)) continue; // removed earlier this tick
     if (u.type === 'troopBoat') stepTroopBoat(game, u);
     else if (u.type === 'tradeShip') stepTradeShip(game, u);
     else if (u.type === 'warship') stepWarship(game, u);
+    else stepPlane(game, u);
   }
 }
 
