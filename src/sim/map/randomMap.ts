@@ -28,12 +28,10 @@ const HEIGHT = {
   falloffDepth: 3,
 } as const;
 
-/** Shape of the noise field that ranks land tiles for hills and mountains. */
+/** Shape of the noise field that ranks land tiles for hills and mountains (the shares are in CONFIG.map). */
 const RELIEF = {
   octaves: 4,
   cyclesAcrossWidth: 6,
-  mountainShare: 0.12,
-  hillShare: 0.23,
 } as const;
 
 const PERSISTENCE = 0.5;
@@ -121,8 +119,8 @@ function topThreshold(sorted: Float32Array, count: number): number {
 }
 
 /**
- * Adds relief to land: ranks land tiles by a noise field of their own, the top 12% become
- * Mountains and the next 23% Hills; the rest stay as they are. Water tiles are never touched.
+ * Adds relief to land: ranks land tiles by a noise field of their own, the top `CONFIG.map.mountainShare` become
+ * Mountains and the next `CONFIG.map.hillShare` Hills; the rest stay as they are. Water tiles are never touched.
  */
 export function applyRelief(terrain: Uint8Array, width: number, height: number, rng: Rng): void {
   const noise = createNoise2D(() => rng.next());
@@ -142,8 +140,8 @@ export function applyRelief(terrain: Uint8Array, width: number, height: number, 
   }
 
   const sorted = relief.slice(0, landCount).sort();
-  const mountains = Math.round(landCount * RELIEF.mountainShare);
-  const hills = Math.round(landCount * RELIEF.hillShare);
+  const mountains = Math.round(landCount * CONFIG.map.mountainShare);
+  const hills = Math.round(landCount * CONFIG.map.hillShare);
   const mountainThreshold = topThreshold(sorted, mountains);
   const hillThreshold = topThreshold(sorted, mountains + hills);
 

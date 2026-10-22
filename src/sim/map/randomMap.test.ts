@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CONFIG } from '../../shared/config';
 import { Terrain } from '../../shared/types';
 import { Rng } from '../util/rng';
 import { tileOf } from './grid';
@@ -32,7 +33,7 @@ describe('generateRandomMap', () => {
 });
 
 describe('applyRelief', () => {
-  it('turns 12% of land into mountains and 23% into hills, leaving water alone', () => {
+  it('turns the configured shares of land into mountains and hills, leaving water alone', () => {
     const width = 100;
     const height = 80;
     const terrain = new Uint8Array(width * height).fill(Terrain.Plains);
@@ -43,7 +44,7 @@ describe('applyRelief', () => {
 
     const count = (v: number): number => terrain.reduce((n, t) => n + (t === v ? 1 : 0), 0);
     expect(count(Terrain.Water)).toBe(width);
-    expect(count(Terrain.Mountains)).toBeCloseTo(land * 0.12, -1);
-    expect(count(Terrain.Hills)).toBeCloseTo(land * 0.23, -1);
+    expect(count(Terrain.Mountains)).toBeCloseTo(land * CONFIG.map.mountainShare, -1);
+    expect(count(Terrain.Hills)).toBeCloseTo(land * CONFIG.map.hillShare, -1);
   });
 });

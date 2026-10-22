@@ -1,7 +1,7 @@
 // Starting values; Task 29 tunes them
 export const CONFIG = {
   tickMs: 100,
-  map: { sizes: { small: [400, 250], medium: [800, 450], large: [1200, 650] }, landFraction: 0.4, navCellSize: 8 },
+  map: { sizes: { small: [400, 250], medium: [800, 450], large: [1200, 650] }, landFraction: 0.4, mountainShare: 0.12, hillShare: 0.23, navCellSize: 8 },
   spawn: { phaseTicks: 100, radius: 4, minDistance: 30, minDistanceFloor: 6, startTroops: 2500, startGold: 500 },
   win: { landShare: 0.8 },
   troops: { baseMax: 5000, perTile: 40, baseGrowth: 2, growthRate: 0.02, overMaxDecay: 0.01 },
