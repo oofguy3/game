@@ -1,18 +1,24 @@
 import { GAME_NAME } from '../shared/constants';
-import type { BuildingType, Difficulty, MapChoice, MapSize } from '../shared/types';
+import type { BuildingType, Command, Difficulty, MapChoice, MapSize } from '../shared/types';
 import type { GameUpdate, InitPayload, StartOptions } from '../worker/protocol';
 import { SimBridge } from './bridge';
 import { Camera } from './camera';
 import { Controls } from './input';
+import { MapInfo } from './mapInfo';
+import { Effects } from './render/effects';
 import { Renderer } from './render/renderer';
+import { UnitInterpolator } from './render/units';
 import { ClientState } from './state';
 import { installTestApi } from './testApi';
+import { ContextMenu, menuEntries } from './ui/contextMenu';
+import { DiplomacyPanel } from './ui/diplomacyPanel';
 import { h, setText } from './ui/dom';
 import { EndScreen } from './ui/endScreen';
 import { EventFeed } from './ui/eventFeed';
 import { Hud } from './ui/hud';
 import { Leaderboard } from './ui/leaderboard';
 import { createMenu } from './ui/menu';
+import { RequestPopups } from './ui/requests';
 import { SpeedControls } from './ui/speedControls';
 import './styles.css';
 
@@ -90,8 +96,14 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
     size();
     camera.resize(canvas.width, canvas.height);
   });
-  const renderer = new Renderer(canvas, state, camera);
+  const info = new MapInfo(init.width, init.height, init.terrain);
+  const units = new UnitInterpolator();
+  const effects = new Effects(state);
+  state.onEvents = (events) => effects.onEvents(events, performance.now());
+  const renderer = new Renderer(canvas, state, camera, units, effects);
   const names = new Map(init.nations.map((n) => [n.id, n.name]));
+  const colors = new Map(init.nations.map((n) => [n.id, n.color]));
+  const send = (cmd: Command): void => bridge.send(cmd);
   let land = 0;
   for (const t of init.terrain) if (t !== 0) land++;
 
@@ -102,7 +114,10 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
   const feed = new EventFeed(state, names);
   const end = new EndScreen(state, Math.max(1, land), backToMenu);
   const banner = h('div', { class: 'banner' });
-  document.querySelector('.app')!.append(hud.el, leaderboard.el, speed.el, feed.el, banner, end.el);
+  const diplomacy = new DiplomacyPanel(state, names, colors, send);
+  const requests = new RequestPopups(state, names, send);
+  const menu = new ContextMenu();
+  document.querySelector('.app')!.append(hud.el, leaderboard.el, speed.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
   // fit the whole map in the space above the bottom bar
   camera.fitMap(hud.el.getBoundingClientRect().height + HUD_GAP);
 
@@ -115,15 +130,22 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
     const current = controls.mode;
     controls.setMode(current.kind === 'build' && current.building === type ? { kind: 'default' } : { kind: 'build', building: type });
   }
+  const menuContext = { state, info, send, ratio: () => hud.attackRatio, openDiplomacy: (id: number) => diplomacy.open(id) };
   controls = new Controls(canvas, camera, state, {
-    send: (cmd) => bridge.send(cmd),
+    send,
     attackRatio: () => hud.attackRatio,
     nudgeRatio: (step) => hud.nudgeRatio(step),
     togglePause: () => speed.togglePause(),
     canBuild,
     onModeChange: (mode) => hud.setSelected(mode.kind === 'build' ? mode.building : null),
+    openMenu: (tile, x, y) => menu.open(menuEntries(menuContext, tile), x, y),
+    dismissMenu: () => {
+      const open = menu.isOpen;
+      menu.close();
+      return open;
+    },
   });
-  if (testMode) installTestApi(state, camera, canvas, (cmd) => bridge.send(cmd));
+  if (testMode) installTestApi(state, info, camera, canvas, send);
 
   let last = performance.now();
   const loop = (now: number): void => {
@@ -146,7 +168,10 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
     } else banner.classList.add('hidden');
   };
   const update = (): void => {
+    units.update(state.units, performance.now());
     hud.update();
+    diplomacy.update();
+    requests.update();
     leaderboard.update();
     feed.update();
     end.update();

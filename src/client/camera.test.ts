@@ -74,3 +74,17 @@ describe('Camera', () => {
     expect(far.y).toBeLessThanOrEqual(250);
   });
 });
+
+describe('Camera.centerOn', () => {
+  it('puts a map point in the middle of the screen, zooming in to at least the minimum', () => {
+    const cam = new Camera(800, 600, 400, 250);
+    cam.fitMap();
+    cam.centerOn(100, 50, 8);
+    expect(cam.zoom).toBe(8);
+    expect(cam.tileToScreen(100, 50)).toEqual({ x: 400, y: 300 });
+    // never zooms out
+    cam.centerOn(200, 100, 2);
+    expect(cam.zoom).toBe(8);
+    expect(cam.tileToScreen(200, 100)).toEqual({ x: 400, y: 300 });
+  });
+});

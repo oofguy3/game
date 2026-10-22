@@ -98,6 +98,45 @@ button.build .label { font-weight: 600; white-space: nowrap; overflow: hidden; t
 button.build .cost { color: #facc15; font-variant-numeric: tabular-nums; }
 button.build.selected { outline: 2px solid var(--accent); background: rgba(59, 130, 246, 0.35); }
 
+/* Feed alarms */
+.feed-line.alarm { background: rgba(127, 29, 29, 0.92); border-color: rgba(248, 113, 113, 0.6); font-weight: 600; }
+
+/* Right-click menu */
+.context-menu { position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 2px; padding: 5px; min-width: 190px; }
+.menu-item { display: flex; justify-content: space-between; gap: 14px; text-align: left; background: transparent; border-color: transparent; padding: 5px 8px; }
+.menu-item:hover:not(:disabled) { background: rgba(59, 130, 246, 0.35); }
+.menu-detail { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.menu-back { color: var(--muted); }
+
+/* Diplomacy panel */
+.diplomacy { top: 64px; left: 12px; width: 300px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+.diplomacy-head { display: flex; align-items: center; gap: 8px; }
+.diplomacy-head .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.diplomacy-name { font-weight: 700; font-size: 16px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diplomacy-head .close { padding: 0 8px; font-size: 18px; line-height: 1.3; background: transparent; border-color: transparent; }
+.badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 999px; background: rgba(100, 116, 139, 0.5); }
+.badge.allied { background: rgba(34, 197, 94, 0.35); color: #bbf7d0; }
+.badge.war { background: rgba(239, 68, 68, 0.4); color: #fecaca; }
+.diplomacy-stats { color: var(--muted); font-variant-numeric: tabular-nums; }
+.diplomacy-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.deal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.deal-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); min-width: 0; }
+.deal-field input { width: 100%; }
+.deal-field input, .diplomacy-joint select {
+  font: inherit; color: var(--text); background: rgba(30, 41, 59, 0.95);
+  border: 1px solid var(--panel-border); border-radius: 6px; padding: 4px 6px; min-width: 0;
+}
+.diplomacy-joint { display: flex; align-items: center; gap: 6px; }
+.diplomacy-joint .panel-title { margin: 0; }
+.diplomacy-joint select { flex: 1; }
+
+/* Request pop-ups */
+.requests { position: absolute; top: 12px; right: 274px; width: 290px; display: flex; flex-direction: column; gap: 8px; z-index: 6; }
+.request { position: static; display: flex; flex-direction: column; gap: 6px; border-color: rgba(250, 204, 21, 0.5); }
+.request-text { font-weight: 600; }
+.request-buttons { display: flex; gap: 6px; align-items: center; }
+.request-timer { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* Overlays */
 .overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -132,4 +171,5 @@ button.play { margin-top: 6px; padding: 10px; font-size: 16px; }
   .builds { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .leaderboard { width: 200px; }
   .feed { width: 260px; bottom: 190px; }
+  .requests { right: 224px; width: 240px; }
 }

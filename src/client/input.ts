@@ -17,6 +17,10 @@ export interface ControlActions {
   /** Whether the player can place a building of `type` right now. */
   canBuild(type: BuildingType): boolean;
   onModeChange(mode: Mode): void;
+  /** Opens the right-click menu for `tile` at page point (x, y). */
+  openMenu(tile: number, x: number, y: number): void;
+  /** Closes the right-click menu; whether it was open. */
+  dismissMenu(): boolean;
 }
 
 /** A drag shorter than this many pixels is a click. */
@@ -42,6 +46,8 @@ export class Controls {
   ) {
     canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
+      // a click away from an open menu only closes it
+      if (this.actions.dismissMenu()) return;
       this.down = { x: e.offsetX, y: e.offsetY, lastX: e.offsetX, lastY: e.offsetY, dragging: false };
     });
     window.addEventListener('mousemove', (e) => {
@@ -62,7 +68,12 @@ export class Controls {
       e.preventDefault();
       this.camera.zoomAt(e.offsetX, e.offsetY, e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
     }, { passive: false });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this.mode.kind !== 'default') this.setMode({ kind: 'default' });
+      const tile = this.tileAt(e.offsetX, e.offsetY);
+      if (tile !== null) this.actions.openMenu(tile, e.clientX, e.clientY);
+    });
     window.addEventListener('keydown', (e) => this.keyDown(e));
     window.addEventListener('keyup', (e) => this.held.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => this.held.clear());
@@ -88,14 +99,20 @@ export class Controls {
     if (dx !== 0 || dy !== 0) this.camera.pan(dx * KEY_PAN_SPEED * dt, dy * KEY_PAN_SPEED * dt);
   }
 
-  private click(sx: number, sy: number): void {
+  /** The tile under canvas point (sx, sy), or null off the map. */
+  private tileAt(sx: number, sy: number): number | null {
     const { init } = this.state;
     const t = this.camera.screenToTile(sx, sy);
     const x = Math.floor(t.x);
     const y = Math.floor(t.y);
-    if (x < 0 || y < 0 || x >= init.width || y >= init.height) return;
-    const tile = y * init.width + x;
-    const nation = init.playerId;
+    if (x < 0 || y < 0 || x >= init.width || y >= init.height) return null;
+    return y * init.width + x;
+  }
+
+  private click(sx: number, sy: number): void {
+    const tile = this.tileAt(sx, sy);
+    if (tile === null) return;
+    const nation = this.state.init.playerId;
     const ratio = this.actions.attackRatio();
     const mode = this.mode;
     if (this.state.phase === 'spawn') {

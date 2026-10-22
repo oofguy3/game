@@ -2,15 +2,18 @@ import type { NationId } from '../../shared/types';
 import type { Camera } from '../camera';
 import { formatNumber } from '../format';
 import type { ClientState } from '../state';
-import { drawBuildingIcon, drawUnitIcon } from './icons';
+import type { Effects } from './effects';
+import { drawBuildingIcon } from './icons';
 import { css, TERRAIN_COLORS } from './palette';
 import { TerritoryLayer } from './territoryLayer';
+import { drawUnits } from './units';
+import type { UnitInterpolator } from './units';
 
 /** Labels smaller than this many pixels are hidden. */
 const MIN_LABEL_PX = 8;
 const MAX_LABEL_PX = 64;
 
-/** Draws the map, buildings, units and nation names onto the game canvas, every frame. */
+/** Draws the map, buildings, units, nation names and effects onto the game canvas, every frame. */
 export class Renderer {
   private layer: TerritoryLayer | null = null;
   private offscreen: HTMLCanvasElement | null = null;
@@ -19,7 +22,13 @@ export class Renderer {
   private names = new Map<NationId, string>();
   private readonly ctx: CanvasRenderingContext2D;
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly state: ClientState, private readonly camera: Camera) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly state: ClientState,
+    private readonly camera: Camera,
+    private readonly units: UnitInterpolator,
+    private readonly effects: Effects,
+  ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D is not available');
     this.ctx = ctx;
@@ -43,12 +52,10 @@ export class Renderer {
       if (!this.onScreen(p.x, p.y, iconSize)) continue;
       drawBuildingIcon(ctx, b.type, p.x, p.y, iconSize, this.colors.get(b.owner) ?? 0x808080, b.underConstruction ? 0.5 : 1);
     }
-    for (const u of state.units) {
-      const p = camera.tileToScreen(u.x + 0.5, u.y + 0.5);
-      if (!this.onScreen(p.x, p.y, iconSize)) continue;
-      drawUnitIcon(ctx, u.type, p.x, p.y, iconSize, this.colors.get(u.owner) ?? 0x808080);
-    }
+    const now = performance.now();
+    drawUnits(ctx, camera, this.units, this.colors, now, iconSize, (x, y) => this.onScreen(x, y, iconSize));
     this.drawLabels();
+    this.effects.draw(ctx, camera, now, this.canvas.width, this.canvas.height);
   }
 
   /** Creates the territory image on first use, then repaints the tiles whose owner changed. */

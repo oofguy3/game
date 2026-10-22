@@ -21,7 +21,7 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
       case 'buildingDone':
         return `${BUILDING_LABELS[e.building]} complete`;
       case 'landed':
-        return 'your boat landed';
+        return 'your troops landed';
       case 'eliminated':
         if (e.nation === me) return `${n(e.by)} wiped you out`;
         return `${n(e.by)} wiped out ${n(e.nation)}`;
@@ -35,6 +35,8 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
         const what = BUILDING_LABELS[e.building].toLowerCase();
         return e.owner === me ? `your ${what} was destroyed` : `you destroyed ${n(e.owner)}’s ${what}`;
       }
+      case 'bombed':
+        return e.owner === me ? `${n(e.by)} bombed you` : `your bombers hit ${n(e.owner)}`;
       case 'unitLost':
         return e.owner === me ? `your ${UNIT_LABELS[e.unit]} was lost` : `you took out ${n(e.owner)}’s ${UNIT_LABELS[e.unit]}`;
       case 'trade':

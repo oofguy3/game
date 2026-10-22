@@ -46,6 +46,7 @@ export type GameEvent =
   | { type: 'buildingCaptured'; from: NationId; to: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildingDestroyed'; owner: NationId; by: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'landed'; nation: NationId; tile: TileIndex; troops: number }
+  | { type: 'bombed'; by: NationId; owner: NationId; tile: TileIndex }
   | { type: 'unitLost'; owner: NationId; by: NationId; unit: UnitType }
   | { type: 'trade'; nation: NationId; partner: NationId; gold: number }
   | { type: 'radarWarning'; nation: NationId; from: NationId; unit: UnitType; tile: TileIndex }

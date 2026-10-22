@@ -84,3 +84,15 @@ describe('ClientState', () => {
     expect(s.feed).toEqual([]);
   });
 });
+
+describe('ClientState.onEvents', () => {
+  it('hands every event of an update to the listener, not only the player’s', () => {
+    const s = new ClientState();
+    s.applyInit(init);
+    const seen: GameEvent[] = [];
+    s.onEvents = (events) => seen.push(...events);
+    const events: GameEvent[] = [{ type: 'bombed', by: 2, owner: 3, tile: 1 }, { type: 'spawned', nation: 2, tile: 0 }];
+    s.applyUpdate(update({ events }));
+    expect(seen).toEqual(events);
+  });
+});

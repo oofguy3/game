@@ -56,6 +56,7 @@ describe('bombers', () => {
     expect(g.buildings.at(factory)).toBeUndefined();
     expect(g.buildings.at(far)).toBeDefined();
     expect(events.filter((e) => e.type === 'buildingDestroyed').map((e) => (e as { by: number }).by)).toEqual([1, 1]);
+    expect(events.filter((e) => e.type === 'bombed')).toEqual([{ type: 'bombed', by: 1, owner: 2, tile: target }]);
     // every b tile within the radius counts
     const { radius, killFactor } = CONFIG.units.bomber;
     let hit = 0;

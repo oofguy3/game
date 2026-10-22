@@ -16,6 +16,8 @@ export class ClientState {
   feed: GameEvent[] = [];
   requests: DiplomacyRequest[] = [];
   result: GameResult | null = null;
+  /** Called with every event of each update (the feed keeps only the player's). */
+  onEvents: ((events: GameEvent[]) => void) | null = null;
   private changed: number[] = [];
 
   get player(): NationSnap | undefined {
@@ -54,6 +56,7 @@ export class ClientState {
     this.units = u.units;
     this.requests = u.requests;
     this.result = u.result;
+    this.onEvents?.(u.events);
     for (const e of u.events) if (this.concernsPlayer(e)) this.feed.push(e);
     if (this.feed.length > FEED_LENGTH) this.feed.splice(0, this.feed.length - FEED_LENGTH);
   }
@@ -86,6 +89,7 @@ export class ClientState {
       case 'buildingCaptured':
         return e.from === me || e.to === me;
       case 'buildingDestroyed':
+      case 'bombed':
         return e.owner === me || e.by === me;
       case 'unitLost':
         return e.owner === me || e.by === me;

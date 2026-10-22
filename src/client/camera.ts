@@ -50,6 +50,14 @@ export class Camera {
     this.y = (this.mapH - freeH / this.zoom) / 2;
   }
 
+  /** Puts map point (tx, ty) in the middle of the screen, zooming in to at least `minZoom`. */
+  centerOn(tx: number, ty: number, minZoom = this.zoom): void {
+    this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.zoom, minZoom));
+    this.x = tx - this.viewW / (2 * this.zoom);
+    this.y = ty - this.viewH / (2 * this.zoom);
+    this.clamp();
+  }
+
   /** Keeps the screen's centre over the map, so it can't be dragged out of sight. */
   private clamp(): void {
     const halfW = this.viewW / (2 * this.zoom);
