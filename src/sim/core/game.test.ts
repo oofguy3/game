@@ -1,0 +1,453 @@
+import { describe, expect, it } from 'vitest';
+import { nationColor } from '../../shared/colors';
+import { CONFIG } from '../../shared/config';
+import { BUILDING_TYPES } from '../../shared/types';
+import type { Command, GameEvent, NationId, TileIndex } from '../../shared/types';
+import { tileOf } from '../map/grid';
+import { mapFromAscii } from '../testing/asciiMap';
+import { makeTestGame } from '../testing/fixtures';
+import { Rng } from '../util/rng';
+import { applyCommand } from './commands';
+import { Game } from './game';
+import { nationNames } from './names';
+
+const rejections = (events: GameEvent[]) => events.filter((e) => e.type === 'rejected');
+
+describe('Game construction', () => {
+  it('player is nation 1, bots follow', () => {
+    const g = new Game({
+      map: mapFromAscii(['####']), seed: 1, player: { name: 'You' },
+      bots: [{ difficulty: 'easy' }, { difficulty: 'hard' }],
+    });
+    expect(g.playerId).toBe(1);
+    expect(g.nations).toHaveLength(4);
+    expect(g.nations[3].difficulty).toBe('hard');
+    expect(g.nations[1]).toMatchObject({ id: 1, name: 'You', isPlayer: true, difficulty: null, color: 0x3b82f6 });
+    expect(g.nations[2]).toMatchObject({ id: 2, isPlayer: false, difficulty: 'easy' });
+  });
+
+  it('without a player the bots start at id 1 and playerId is 0', () => {
+    const g = new Game({ map: mapFromAscii(['####']), seed: 1, player: null, bots: [{ difficulty: 'normal' }, { difficulty: 'insane' }] });
+    expect(g.playerId).toBe(0);
+    expect(g.nations).toHaveLength(3);
+    expect(g.nations.map((n) => n.id)).toEqual([0, 1, 2]);
+    expect(g.nations[1].isPlayer).toBe(false);
+    expect(g.nations[2].difficulty).toBe('insane');
+  });
+
+  it('nation 0 is a dead placeholder for unowned land', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: { name: 'You' }, bots: [] });
+    expect(g.nations[0]).toMatchObject({ id: 0, alive: false, spawned: false, tiles: 0 });
+    expect(g.alive().map((n) => n.id)).toEqual([1]);
+  });
+
+  it('new nations start alive but unspawned with zeroed state', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: null, bots: [{ difficulty: 'easy', personality: 'builder' }] });
+    const n = g.nations[1];
+    expect(n).toMatchObject({
+      alive: true, spawned: false, spawnTile: -1, troops: 0, gold: 0, tiles: 0, tradeIncome: 0, sumX: 0, sumY: 0,
+      personality: 'builder', stats: { peakTiles: 0, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 },
+    });
+    expect(n.border.size).toBe(0);
+    expect(Object.keys(n.buildingCounts).sort()).toEqual([...BUILDING_TYPES].sort());
+    expect(Object.values(n.buildingCounts).every((c) => c === 0)).toBe(true);
+  });
+
+  it('bots without a personality get null', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: null, bots: [{ difficulty: 'easy' }] });
+    expect(g.nations[1].personality).toBeNull();
+  });
+
+  it('starts in the spawn phase with the configured length', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: null, bots: [] });
+    expect(g.phase).toBe('spawn');
+    expect(g.tick).toBe(0);
+    expect(g.result).toBeNull();
+    expect(g.spawnEndsAt).toBe(CONFIG.spawn.phaseTicks);
+    expect(g.spawnSpacing).toBe(0);
+    expect(g.debug).toBe(false);
+    expect(g.checkVictory).toBe(true);
+    expect(g.owner).toBeInstanceOf(Uint16Array);
+    expect(g.owner).toHaveLength(2);
+  });
+
+  it('honours spawnTicks, debug and checkVictory', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: null, bots: [], spawnTicks: 7, debug: true, checkVictory: false });
+    expect(g.spawnEndsAt).toBe(7);
+    expect(g.debug).toBe(true);
+    expect(g.checkVictory).toBe(false);
+  });
+
+  it('builds a water nav for the map', () => {
+    const g = new Game({ map: mapFromAscii(['#.', '..']), seed: 1, player: null, bots: [] });
+    expect(g.nav.cellSize).toBe(CONFIG.map.navCellSize);
+  });
+
+  it('gives every nation a unique name and its own color', () => {
+    const g = new Game({
+      map: mapFromAscii(['##']), seed: 3, player: { name: 'You' },
+      bots: Array.from({ length: 12 }, () => ({ difficulty: 'normal' as const })),
+    });
+    const real = g.nations.slice(1);
+    expect(new Set(real.map((n) => n.name)).size).toBe(real.length);
+    expect(new Set(real.map((n) => n.color)).size).toBe(real.length);
+    for (const n of real.slice(1)) expect(n.color).toBe(nationColor(n.id, false));
+  });
+
+  it('names and colors depend only on the seed', () => {
+    const make = (seed: number) => new Game({ map: mapFromAscii(['##']), seed, player: null, bots: [{ difficulty: 'easy' }, { difficulty: 'easy' }, { difficulty: 'easy' }] });
+    const names = (g: Game) => g.nations.map((n) => n.name);
+    expect(names(make(5))).toEqual(names(make(5)));
+    expect(names(make(5))).not.toEqual(names(make(6)));
+  });
+
+  it('sizes the relations table for every nation', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: { name: 'You' }, bots: [{ difficulty: 'easy' }] });
+    expect(g.relations.get(1, 2)).toBe('neutral');
+    g.relations.set(2, 1, 'war');
+    expect(g.relations.warsOf(1)).toEqual([2]);
+  });
+
+  it('nextId hands out increasing unique ids', () => {
+    const g = new Game({ map: mapFromAscii(['##']), seed: 1, player: null, bots: [] });
+    const ids = [g.nextId(), g.nextId(), g.nextId()];
+    expect(new Set(ids).size).toBe(3);
+    expect(ids[0]).toBeLessThan(ids[1]);
+    expect(ids[1]).toBeLessThan(ids[2]);
+  });
+});
+
+describe('setOwner', () => {
+  it('maintains counts, borders and changed tiles', () => {
+    const g = makeTestGame({ map: ['#####'], owners: ['aab..'], nations: [{}, {}] });
+    expect(g.nations[1].tiles).toBe(2);
+    expect([...g.nations[1].border]).toEqual([1]);
+    g.setOwner(2, 1);
+    expect(g.nations[2].tiles).toBe(0);
+    expect([...g.nations[1].border]).toEqual([2]);
+    expect(g.drainChangedTiles()).toContain(2);
+  });
+
+  it('updates the border of both nations when a tile changes hands', () => {
+    const g = makeTestGame({ map: ['#####'], owners: ['aabbb'], nations: [{}, {}] });
+    expect([...g.nations[1].border]).toEqual([1]);
+    expect([...g.nations[2].border]).toEqual([2]);
+    g.setOwner(2, 1);
+    expect([...g.nations[1].border]).toEqual([2]);
+    expect([...g.nations[2].border]).toEqual([3]);
+    expect([g.nations[1].tiles, g.nations[2].tiles]).toEqual([3, 2]);
+  });
+
+  it('counts water and unowned land, but not the map edge, as outside', () => {
+    const solid = makeTestGame({ map: ['###', '###', '###'], owners: ['aaa', 'aaa', 'aaa'], nations: [{}] });
+    expect(solid.nations[1].border.size).toBe(0);
+    const coast = makeTestGame({ map: ['##.'], owners: ['aa.'], nations: [{}] });
+    expect([...coast.nations[1].border]).toEqual([1]);
+  });
+
+  it('recomputes vertical and horizontal neighbours', () => {
+    const g = makeTestGame({ map: ['###', '###', '###'], owners: ['aaa', 'aaa', 'aaa'], nations: [{}, {}] });
+    const centre = tileOf(g.map, 1, 1);
+    g.setOwner(centre, 2);
+    expect([...g.nations[1].border].sort((x, y) => x - y)).toEqual([1, 3, 5, 7]);
+    expect([...g.nations[2].border]).toEqual([centre]);
+    g.setOwner(centre, 1);
+    expect(g.nations[1].border.size).toBe(0);
+    expect(g.nations[2].border.size).toBe(0);
+    expect(g.nations[2].tiles).toBe(0);
+  });
+
+  it('releasing a tile to unowned removes it from the border and exposes its neighbours', () => {
+    const g = makeTestGame({ map: ['###'], owners: ['aaa'], nations: [{}] });
+    g.setOwner(1, 0);
+    expect(g.nations[1].tiles).toBe(2);
+    expect([...g.nations[1].border].sort()).toEqual([0, 2]);
+    expect(g.owner[1]).toBe(0);
+  });
+
+  it('tracks coordinate sums for centroids', () => {
+    const g = makeTestGame({ map: ['###', '###'], owners: ['a..', '.aa'], nations: [{}] });
+    expect([g.nations[1].sumX, g.nations[1].sumY]).toEqual([0 + 1 + 2, 0 + 1 + 1]);
+    g.setOwner(tileOf(g.map, 2, 1), 0);
+    expect([g.nations[1].sumX, g.nations[1].sumY]).toEqual([0 + 1, 0 + 1]);
+  });
+
+  it('peakTiles keeps the maximum after losses', () => {
+    const g = makeTestGame({ map: ['####'], owners: ['aaa.'], nations: [{}] });
+    expect(g.nations[1].stats.peakTiles).toBe(3);
+    g.setOwner(0, 0);
+    g.setOwner(1, 0);
+    expect(g.nations[1].tiles).toBe(1);
+    expect(g.nations[1].stats.peakTiles).toBe(3);
+    g.setOwner(3, 1);
+    expect(g.nations[1].stats.peakTiles).toBe(3);
+  });
+
+  it('is a no-op when the owner does not change', () => {
+    const g = makeTestGame({ map: ['###'], owners: ['a..'], nations: [{}] });
+    let calls = 0;
+    g.onOwnerChange.push(() => { calls++; });
+    g.setOwner(0, 1);
+    g.setOwner(2, 0);
+    expect(calls).toBe(0);
+    expect(g.drainChangedTiles()).toEqual([]);
+    expect(g.nations[1].tiles).toBe(1);
+  });
+
+  it('records every changed tile once drained', () => {
+    const g = makeTestGame({ map: ['###'], nations: [{}] });
+    g.setOwner(0, 1);
+    g.setOwner(2, 1);
+    expect(g.drainChangedTiles()).toEqual([0, 2]);
+    expect(g.drainChangedTiles()).toEqual([]);
+  });
+
+  it('calls onOwnerChange hooks after the state is updated', () => {
+    const g = makeTestGame({ map: ['###'], owners: ['aa.'], nations: [{}, {}] });
+    const seen: { tile: TileIndex; from: NationId; to: NationId; ownerNow: number; tilesNow: number }[] = [];
+    g.onOwnerChange.push((tile, from, to) => seen.push({ tile, from, to, ownerNow: g.owner[tile], tilesNow: g.nations[to].tiles }));
+    g.onOwnerChange.push((tile) => seen.push({ tile, from: -1, to: -1, ownerNow: -1, tilesNow: -1 }));
+    g.setOwner(1, 2);
+    expect(seen).toEqual([
+      { tile: 1, from: 1, to: 2, ownerNow: 2, tilesNow: 1 },
+      { tile: 1, from: -1, to: -1, ownerNow: -1, tilesNow: -1 },
+    ]);
+  });
+});
+
+describe('applyCommand', () => {
+  it('rejects commands from unknown or dead nations with one event', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}, { alive: false }], debug: true });
+    expect(applyCommand(g, { type: 'debugGrant', nation: 9, gold: 1 })).toEqual({ ok: false, reason: 'unknown nation' });
+    expect(applyCommand(g, { type: 'debugGrant', nation: 2, gold: 1 })).toEqual({ ok: false, reason: 'eliminated' });
+    expect(g.drainEvents().filter((e) => e.type === 'rejected')).toHaveLength(2);
+  });
+
+  it('emits the rejected event naming the nation and reason', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}, { alive: false }], debug: true });
+    applyCommand(g, { type: 'debugGrant', nation: 9, gold: 1 });
+    applyCommand(g, { type: 'debugGrant', nation: 2, gold: 1 });
+    expect(g.drainEvents()).toEqual([
+      { type: 'rejected', nation: 9, reason: 'unknown nation' },
+      { type: 'rejected', nation: 2, reason: 'eliminated' },
+    ]);
+    expect(g.nations[2].gold).toBe(0);
+  });
+
+  it('treats the unowned id, negative ids and fractional ids as unknown', () => {
+    const g = makeTestGame({ map: ['##'], nations: [{}], debug: true });
+    for (const nation of [0, -1, 1.5, 2]) {
+      expect(applyCommand(g, { type: 'debugGrant', nation, gold: 1 })).toEqual({ ok: false, reason: 'unknown nation' });
+    }
+    expect(rejections(g.drainEvents())).toHaveLength(4);
+  });
+
+  it('debugGrant adds gold and troops in debug games', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{ gold: 10, troops: 20 }], debug: true });
+    expect(applyCommand(g, { type: 'debugGrant', nation: 1, gold: 5, troops: 7 })).toEqual({ ok: true });
+    expect([g.nations[1].gold, g.nations[1].troops]).toEqual([15, 27]);
+    expect(applyCommand(g, { type: 'debugGrant', nation: 1, gold: 1 })).toEqual({ ok: true });
+    expect([g.nations[1].gold, g.nations[1].troops]).toEqual([16, 27]);
+    expect(g.drainEvents()).toEqual([]);
+  });
+
+  it('debugGrant only works in debug games', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{ gold: 10 }] });
+    const reason = 'debug commands are disabled';
+    expect(applyCommand(g, { type: 'debugGrant', nation: 1, gold: 5 })).toEqual({ ok: false, reason });
+    expect(g.nations[1].gold).toBe(10);
+    expect(g.drainEvents()).toEqual([{ type: 'rejected', nation: 1, reason }]);
+  });
+
+  it('rejects every other command type as not implemented, with one event each', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
+    const cmds: Command[] = [
+      { type: 'spawn', nation: 1, tile: 1 },
+      { type: 'attack', nation: 1, tile: 1, ratio: 0.5 },
+      { type: 'boat', nation: 1, tile: 1, ratio: 0.5 },
+      { type: 'build', nation: 1, building: 'city', tile: 0 },
+      { type: 'buildUnit', nation: 1, unit: 'warship', buildingId: 1 },
+      { type: 'moveUnit', nation: 1, unitId: 1, tile: 1 },
+      { type: 'bomb', nation: 1, tile: 1 },
+      { type: 'paradrop', nation: 1, tile: 1, ratio: 0.5 },
+      { type: 'proposeAlliance', nation: 1, to: 1 },
+      { type: 'breakAlliance', nation: 1, with: 1 },
+      { type: 'proposePeace', nation: 1, to: 1 },
+      { type: 'proposeDeal', nation: 1, to: 1, deal: { giveGold: 0, giveTroops: 0, getGold: 0, getTroops: 0 } },
+      { type: 'requestJointAttack', nation: 1, to: 1, target: 1 },
+      { type: 'respond', nation: 1, requestId: 1, accept: true },
+      { type: 'embargo', nation: 1, with: 1, on: true },
+    ];
+    for (const cmd of cmds) {
+      expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'not implemented' });
+    }
+    const events = g.drainEvents();
+    expect(events).toHaveLength(cmds.length);
+    expect(events.every((e) => e.type === 'rejected' && e.nation === 1 && e.reason === 'not implemented')).toBe(true);
+  });
+});
+
+describe('Game.step', () => {
+  it('applies queued commands in order, then advances the tick', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}, { alive: false }], debug: true });
+    g.queue({ type: 'debugGrant', nation: 9, gold: 1 });
+    g.queue({ type: 'debugGrant', nation: 1, gold: 5 });
+    g.queue({ type: 'debugGrant', nation: 2, gold: 1 });
+    expect(g.nations[1].gold).toBe(0);
+    expect(g.tick).toBe(0);
+    g.step();
+    expect(g.tick).toBe(1);
+    expect(g.nations[1].gold).toBe(5);
+    expect(g.drainEvents()).toEqual([
+      { type: 'rejected', nation: 9, reason: 'unknown nation' },
+      { type: 'rejected', nation: 2, reason: 'eliminated' },
+    ]);
+  });
+
+  it('consumes the queue so commands apply only once', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
+    g.queue({ type: 'debugGrant', nation: 1, gold: 5 });
+    g.step();
+    g.step();
+    expect(g.nations[1].gold).toBe(5);
+    expect(g.tick).toBe(2);
+  });
+
+  it('a command rejected by an earlier command still lets later ones run', () => {
+    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
+    g.queue({ type: 'spawn', nation: 1, tile: 1 });
+    g.queue({ type: 'debugGrant', nation: 1, troops: 3 });
+    g.step();
+    expect(g.nations[1].troops).toBe(3);
+  });
+});
+
+describe('Game events and alive()', () => {
+  it('drainEvents returns events in emit order and clears them', () => {
+    const g = makeTestGame({ map: ['##'], nations: [{}] });
+    g.emit({ type: 'phase', phase: 'playing' });
+    g.emit({ type: 'spawned', nation: 1, tile: 0 });
+    expect(g.drainEvents()).toEqual([{ type: 'phase', phase: 'playing' }, { type: 'spawned', nation: 1, tile: 0 }]);
+    expect(g.drainEvents()).toEqual([]);
+  });
+
+  it('alive() lists living nations in id order and skips the placeholder', () => {
+    const g = makeTestGame({ map: ['##'], nations: [{}, { alive: false }, {}] });
+    expect(g.alive().map((n) => n.id)).toEqual([1, 3]);
+  });
+});
+
+describe('nationNames', () => {
+  it('names are unique', () => expect(new Set(nationNames(new Rng(1), 40)).size).toBe(40));
+
+  it('stays unique for large counts', () => expect(new Set(nationNames(new Rng(2), 600)).size).toBe(600));
+
+  it('returns capitalised, non-empty names and none for a count of 0', () => {
+    expect(nationNames(new Rng(1), 0)).toEqual([]);
+    for (const name of nationNames(new Rng(4), 40)) expect(name).toMatch(/^[A-Z][a-z]{2,}$/);
+  });
+
+  it('is deterministic per seed', () => {
+    expect(nationNames(new Rng(9), 10)).toEqual(nationNames(new Rng(9), 10));
+    expect(nationNames(new Rng(9), 10)).not.toEqual(nationNames(new Rng(10), 10));
+  });
+});
+
+describe('nationColor', () => {
+  const hueOf = (rgb: number): number => {
+    const r = ((rgb >> 16) & 255) / 255, g = ((rgb >> 8) & 255) / 255, b = (rgb & 255) / 255;
+    const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+    if (d === 0) return 0;
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+
+  it('the player is always blue', () => {
+    expect(nationColor(0, true)).toBe(0x3b82f6);
+    expect(nationColor(7, true)).toBe(0x3b82f6);
+  });
+
+  it('bots get valid, repeatable 24-bit colors', () => {
+    for (let i = 1; i <= 40; i++) {
+      const c = nationColor(i, false);
+      expect(Number.isInteger(c) && c >= 0 && c <= 0xffffff).toBe(true);
+      expect(nationColor(i, false)).toBe(c);
+    }
+  });
+
+  it('the first 40 bot colors are all different from each other and from the player', () => {
+    const colors = Array.from({ length: 40 }, (_, i) => nationColor(i + 1, false));
+    expect(new Set(colors).size).toBe(40);
+    expect(colors).not.toContain(0x3b82f6);
+  });
+
+  it('uses the golden angle with 65% saturation and 52% lightness', () => {
+    // index 1 -> hue 137.508 degrees, a mid green.
+    const c = nationColor(1, false);
+    const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+    expect(hueOf(c)).toBeCloseTo(137.508, 0);
+    const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 2 / 255;
+    expect(lightness).toBeCloseTo(0.52, 2);
+  });
+
+  it('keeps bot hues more than 12 degrees away from the player blue', () => {
+    for (let i = 1; i <= 300; i++) {
+      const h = hueOf(nationColor(i, false));
+      const diff = Math.abs(((h - 217 + 540) % 360) - 180);
+      expect(diff).toBeGreaterThan(11); // 1 degree of slack for 8-bit rounding
+    }
+  });
+
+  it('shifts a hue that would land near the player blue by 30 degrees', () => {
+    // 137.508 * 6 mod 360 = 105.05 and * 12 mod 360 = 210.1: the latter is inside the +-12 band.
+    expect(hueOf(nationColor(12, false))).toBeCloseTo(240.1, 0);
+  });
+});
+
+describe('makeTestGame', () => {
+  it('starts in the playing phase, with no player and clean queues', () => {
+    const g = makeTestGame({ map: ['#####'], owners: ['aab..'], nations: [{}, {}] });
+    expect(g.phase).toBe('playing');
+    expect(g.playerId).toBe(0);
+    expect(g.tick).toBe(0);
+    expect(g.debug).toBe(false);
+    expect(g.checkVictory).toBe(false);
+    expect(g.nations).toHaveLength(3);
+    expect(g.drainEvents()).toEqual([]);
+    expect(g.drainChangedTiles()).toEqual([]);
+  });
+
+  it('maps owner letters to nation ids and marks owners as spawned', () => {
+    const g = makeTestGame({ map: ['####'], owners: ['a.c.'], nations: [{}, {}, {}] });
+    expect(g.owner[0]).toBe(1);
+    expect(g.owner[1]).toBe(0);
+    expect(g.owner[2]).toBe(3);
+    expect(g.nations.map((n) => n.spawned)).toEqual([false, true, false, true]);
+    expect(g.nations.map((n) => n.tiles)).toEqual([0, 1, 0, 1]);
+  });
+
+  it('applies nation overrides after ownership so explicit values win', () => {
+    const g = makeTestGame({
+      map: ['###'], owners: ['ab.'],
+      nations: [{ troops: 100, gold: 7, spawned: false }, { name: 'Zed', alive: false, tradeIncome: 2.5 }],
+    });
+    expect(g.nations[1]).toMatchObject({ troops: 100, gold: 7, spawned: false });
+    expect(g.nations[2]).toMatchObject({ name: 'Zed', alive: false, tradeIncome: 2.5, spawned: true });
+  });
+
+  it('passes through debug, victory and difficulties', () => {
+    const g = makeTestGame({
+      map: ['##'], nations: [{}, {}, {}], debug: true, victory: true, difficulties: ['easy', 'hard'],
+    });
+    expect(g.debug).toBe(true);
+    expect(g.checkVictory).toBe(true);
+    expect(g.nations.slice(1).map((n) => n.difficulty)).toEqual(['easy', 'hard', 'normal']);
+  });
+
+  it('rejects a malformed owners grid', () => {
+    expect(() => makeTestGame({ map: ['##'], owners: ['a'], nations: [{}] })).toThrow();
+    expect(() => makeTestGame({ map: ['##', '##'], owners: ['aa'], nations: [{}] })).toThrow();
+    expect(() => makeTestGame({ map: ['##'], owners: ['a!'], nations: [{}] })).toThrow();
+    expect(() => makeTestGame({ map: ['##'], owners: ['ab'], nations: [{}] })).toThrow();
+  });
+});

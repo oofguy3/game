@@ -31,7 +31,7 @@ export const CONFIG = {
     paraPlane: { cost: 1500, speed: 2, hp: 3, maxTroopsShare: 0.3, cooldownTicks: 100 },
     fighter: { cost: 3000, buildTicks: 60, speed: 3, hp: 4, range: 30, detect: 25, hitChance: 0.3 },
   },
-  diplomacy: { requestTtlTicks: 300, betrayalTrustPenalty: 0.5, trustRecoveryPerTick: 0.0005 },
+  diplomacy: { requestTtlTicks: 300, defaultTrust: 0.5, betrayalTrustPenalty: 0.5, trustRecoveryPerTick: 0.0005 },
   ai: { buildingTileValue: 40, neutralBias: 1.5, minAttackScore: 0.01, secondFrontPenalty: 0.4, gangUpShare: 0.35,
         counterRiskWeight: 2, minParaTroops: 2000, proposalCooldownTicks: 300, saveHorizonTicks: 300 },
   client: { labelEveryTicks: 20, maxCatchUpTicks: 8 },
