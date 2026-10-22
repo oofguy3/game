@@ -28,6 +28,8 @@ const byId = (a: Building, b: Building): number => a.id - b.id;
 export class BuildingStore {
   /** Every building, in the order added. */
   readonly byId = new Map<number, Building>();
+  /** Goes up whenever a building is added, removed, changes hands or finishes, so readers can tell if anything changed. */
+  version = 0;
   private readonly idAt = new Map<TileIndex, number>();
   /** Per owner, per type: that owner's buildings of the type, sorted by id. */
   private readonly owned = new Map<NationId, Map<BuildingType, Building[]>>();
@@ -54,6 +56,7 @@ export class BuildingStore {
     this.byId.set(b.id, b);
     this.idAt.set(b.tile, b.id);
     this.insert(b);
+    this.version++;
   }
 
   /** Removes building `id`; does nothing if there is none. */
@@ -63,6 +66,7 @@ export class BuildingStore {
     this.byId.delete(id);
     this.idAt.delete(b.tile);
     this.detach(b);
+    this.version++;
   }
 
   /** Makes nation `to` the owner of building `id`; does nothing if there is none. */
@@ -72,6 +76,7 @@ export class BuildingStore {
     this.detach(b);
     b.owner = to;
     this.insert(b);
+    this.version++;
   }
 
   private listOf(owner: NationId, type: BuildingType): Building[] {
@@ -154,6 +159,7 @@ export function stepBuildings(game: Game): void {
     if (b.ticksLeft === 0) continue;
     b.ticksLeft--;
     if (b.ticksLeft > 0) continue;
+    game.buildings.version++;
     const owner = game.nations[b.owner];
     owner.buildingCounts[b.type]++;
     owner.stats.buildingsBuilt++;

@@ -1,7 +1,7 @@
 import { nationColor, UNOWNED_COLOR } from '../../shared/colors';
 import { CONFIG } from '../../shared/config';
 import type {
-  Command, Difficulty, GameEvent, GameResult, NationId, Personality, Phase, TileIndex,
+  Command, DiplomacyRequest, Difficulty, GameEvent, GameResult, NationId, Personality, Phase, TileIndex,
 } from '../../shared/types';
 import type { GameMap } from '../map/gameMap';
 import { forEachNeighbor, xOf, yOf } from '../map/grid';
@@ -68,6 +68,8 @@ export class Game {
   attacks: Attack[] = [];
   /** Every building on the map, finished or under construction. */
   readonly buildings = new BuildingStore();
+  /** Pending diplomacy requests by id. */
+  readonly requests = new Map<number, DiplomacyRequest>();
   /** Called after each ownership change, once the game state is already updated. */
   onOwnerChange: ((tile: TileIndex, from: NationId, to: NationId) => void)[] = [];
 
