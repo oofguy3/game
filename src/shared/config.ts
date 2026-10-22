@@ -52,6 +52,10 @@ export const CONFIG = {
         expandShare: 0.5,
         // a counterattack sends this many troops per troop attacking us
         counterattackFactor: 1.1,
+        // an attack gets at most the troops it can spend in this many of the bot's decision intervals
+        paceMargin: 2,
+        // most attacks a bot starts or tops up in one decision
+        maxAttacksPerThink: 3,
         // spawn choice: landmass size worth full marks (and their weight), spacing multiples worth full marks, the
         // radius and weight of the plains share, and random draws allowed per wanted sample
         spawnLandmassTarget: 2000, spawnLandmassWeight: 2, spawnSpacingReach: 3, spawnPlainsRadius: 6,

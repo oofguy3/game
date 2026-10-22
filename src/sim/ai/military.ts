@@ -3,9 +3,12 @@ import type { Command, NationId, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
 import { forEachNeighbor } from '../map/grid';
 import { estimateConquest, isTargetTile } from '../systems/combat';
+import type { ConquestEstimate } from '../systems/combat';
 import type { Bot } from './bot';
 import type { NeighborInfo, Perception } from './perception';
 import type { DifficultyProfile } from './profile';
+
+type AttackCommand = Extract<Command, { type: 'attack' }>;
 
 export interface TargetScore {
   /** The nation to attack; 0 = unowned land. */
@@ -66,29 +69,46 @@ export function scoreTargets(game: Game, p: Perception, bot: Bot): TargetScore[]
   };
 
   const scores: TargetScore[] = [];
-  const consider = (target: NationId, base: number): void => {
+  const consider = (target: NationId, base: number, troops: number): void => {
     let score = base - counterRisk(target);
     score *= 1 + profile.noise * (bot.rng.next() * 2 - 1);
-    if (score >= ai.minAttackScore) scores.push({ target, score, troops: budget });
+    if (score >= ai.minAttackScore && troops >= 1) scores.push({ target, score, troops });
   };
 
   if (p.neutralBorder > 0) {
     const est = estimateConquest(game, p.me, 0, budget);
     // spreading into empty land opens no front, so it carries no second-front penalty
-    consider(0, (est.tiles / Math.max(1, est.attackerLoss)) * ai.neutralBias);
+    consider(0, (est.tiles / Math.max(1, est.attackerLoss)) * ai.neutralBias, paced(game, p, bot, 0, p.neutralBorder, est, budget));
   }
   for (const n of p.neighbors) {
     if (n.relation === 'allied' && memory.betrayTarget !== n.id) continue;
-    consider(n.id, nationScore(game, p, bot, n, budget));
+    const est = estimateConquest(game, p.me, n.id, budget);
+    consider(n.id, nationScore(p, bot, n, est), paced(game, p, bot, n.id, n.sharedBorder, est, budget));
   }
   return scores.sort((a, b) => b.score - a.score);
 }
 
-/** The score of attacking neighbour `n` with `budget` troops, before lookahead and noise. */
-function nationScore(game: Game, p: Perception, bot: Bot, n: NeighborInfo, budget: number): number {
+/**
+ * The troops worth sending at `target` now: what an attack along a front of `front` tiles can spend over
+ * `paceMargin` of this bot's decision intervals (at the estimate's cost per tile), less the troops our running attack
+ * on it already holds, and never more than `budget`. Troops parked in an attack don't grow, so sending more is waste.
+ */
+function paced(
+  game: Game, p: Perception, bot: Bot, target: NationId, front: number, est: ConquestEstimate, budget: number,
+): number {
+  if (est.tiles === 0) return 0;
+  const { frontFraction, minTilesPerTick, maxTilesPerTick } = CONFIG.combat;
+  const perTick = Math.min(maxTilesPerTick, Math.max(minTilesPerTick, front * frontFraction));
+  const useful = perTick * bot.profile.reactionTicks * CONFIG.ai.paceMargin * (est.attackerLoss / est.tiles);
+  let committed = 0;
+  for (const a of game.attacks) if (a.attacker === p.me && a.target === target) committed += a.troops;
+  return Math.min(budget, Math.max(0, useful - committed));
+}
+
+/** The score of attacking neighbour `n`, given the estimate `est` of attacking it with the budget. */
+function nationScore(p: Perception, bot: Bot, n: NeighborInfo, est: ConquestEstimate): number {
   const { profile, weights, memory } = bot;
   const ai = CONFIG.ai;
-  const est = estimateConquest(game, p.me, n.id, budget);
   const gain = est.tiles + (ai.buildingTileValue * n.buildings * est.tiles) / Math.max(1, n.tiles);
   const opportunity = (n.otherWars > 0 ? 0.5 : 0) + (n.density < p.density ? 0.3 : 0);
   let score = (gain / Math.max(1, est.attackerLoss)) * weights.aggression * (1 + weights.opportunism * opportunity);
@@ -104,19 +124,35 @@ function nationScore(game: Game, p: Perception, bot: Bot, n: NeighborInfo, budge
  * second best.
  */
 export function chooseAttack(game: Game, p: Perception, bot: Bot): Command | null {
+  return chooseAttacks(game, p, bot)[0] ?? null;
+}
+
+/**
+ * The attacks this bot makes now: a counterattack alone when one is due; otherwise targets in score order (the top two
+ * swapped with `mistakeChance`), each given the troops it can use, until the budget runs out or
+ * `maxAttacksPerThink` attacks are made. A budget one front can't absorb is spread rather than left idle.
+ */
+export function chooseAttacks(game: Game, p: Perception, bot: Bot): Command[] {
   if (bot.profile.counterattack) {
     const counter = counterattack(game, p, bot);
-    if (counter) return counter;
+    if (counter) return [counter];
   }
   const scores = scoreTargets(game, p, bot);
-  if (scores.length === 0) return null;
-  let pick = scores[0];
-  if (scores.length > 1 && bot.rng.chance(bot.profile.mistakeChance)) pick = scores[1];
-  return attackOn(game, p, pick.target, pick.troops);
+  if (scores.length > 1 && bot.rng.chance(bot.profile.mistakeChance)) [scores[0], scores[1]] = [scores[1], scores[0]];
+  let remaining = attackBudget(p, bot.profile);
+  const attacks: Command[] = [];
+  for (const s of scores) {
+    if (attacks.length >= CONFIG.ai.maxAttacksPerThink || remaining < 1) break;
+    const cmd = attackOn(game, p, s.target, Math.min(remaining, s.troops));
+    if (cmd === null) continue;
+    attacks.push(cmd);
+    remaining -= cmd.ratio * p.troops;
+  }
+  return attacks;
 }
 
 /** An attack sending `counterattackFactor` × the biggest incoming attack back at its sender, if we can spare it. */
-function counterattack(game: Game, p: Perception, bot: Bot): Command | null {
+function counterattack(game: Game, p: Perception, bot: Bot): AttackCommand | null {
   let attacker: NeighborInfo | null = null;
   for (const n of p.neighbors) {
     if (n.attackingMe > 0 && (attacker === null || n.attackingMe > attacker.attackingMe)) attacker = n;
@@ -127,10 +163,13 @@ function counterattack(game: Game, p: Perception, bot: Bot): Command | null {
   return attackOn(game, p, attacker.id, troops);
 }
 
-/** An attack command sending `troops` at `target`, aimed at a target tile touching our border; null if none fits. */
-function attackOn(game: Game, p: Perception, target: NationId, troops: number): Command | null {
-  const ratio = troops / Math.max(1, p.troops);
-  if (ratio < CONFIG.combat.minAttackRatio || Math.floor(p.troops * ratio) < 1) return null;
+/**
+ * An attack command sending `troops` at `target`, aimed at a target tile touching our border; null if none fits. An
+ * attack command sends at least `minAttackRatio` of the pool, so a smaller amount is rounded up to that.
+ */
+function attackOn(game: Game, p: Perception, target: NationId, troops: number): AttackCommand | null {
+  const ratio = Math.max(CONFIG.combat.minAttackRatio, troops / Math.max(1, p.troops));
+  if (Math.floor(p.troops * ratio) < 1) return null;
   const tile = frontierTile(game, p.me, target);
   if (tile === null) return null;
   return { type: 'attack', nation: p.me, tile, ratio: Math.min(1, ratio) };

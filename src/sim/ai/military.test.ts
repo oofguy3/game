@@ -11,7 +11,7 @@ import { estimateConquest } from '../systems/combat';
 import { declareWar } from '../systems/relations';
 import { makeTestGame } from '../testing/fixtures';
 import { Bot } from './bot';
-import { attackBudget, chooseAttack, reserveNeeded, scoreTargets } from './military';
+import { attackBudget, chooseAttack, chooseAttacks, reserveNeeded, scoreTargets } from './military';
 import { perceive } from './perception';
 import type { NeighborInfo, Perception } from './perception';
 import { DIFFICULTY, PERSONALITY } from './profile';
@@ -110,9 +110,12 @@ describe('chooseAttack', () => {
     const g = makeTestGame({ map: ['########'], owners: ['aa......'], nations: [{ troops: 1000 }] });
     const bot = new Bot(g, 1, 'normal', 'aggressive', SEED);
     const cmds = bot.think();
-    expect(cmds).toEqual([{ type: 'attack', nation: 1, tile: 2, ratio: CONFIG.ai.expandShare }]);
+    expect(cmds).toEqual([{ type: 'attack', nation: 1, tile: 2, ratio: expect.any(Number) }]);
+    const { ratio } = cmds[0] as AttackCommand;
+    // paced: never more than the expansion budget
+    expect(ratio).toBeLessThanOrEqual(CONFIG.ai.expandShare);
     expect(applyCommand(g, cmds[0])).toEqual({ ok: true });
-    expect(g.attacks).toEqual([expect.objectContaining({ attacker: 1, target: 0, troops: 500 })]);
+    expect(g.attacks).toEqual([expect.objectContaining({ attacker: 1, target: 0, troops: Math.floor(1000 * ratio) })]);
   });
 
   it('picks the weaker of two neighbours', () => {
@@ -127,7 +130,8 @@ describe('chooseAttack', () => {
       const p = perceive(g, 1);
       const cmd = chooseAttack(g, p, bot);
       expect(targetOf(g, cmd, 1)).toBe(weaker);
-      expect(sent(cmd, p.troops)).toBeCloseTo(attackBudget(p, bot.profile), 6);
+      expect(sent(cmd, p.troops)).toBeGreaterThan(0);
+      expect(sent(cmd, p.troops)).toBeLessThanOrEqual(attackBudget(p, bot.profile) + 1e-6);
     }
   });
 
@@ -165,7 +169,7 @@ describe('chooseAttack', () => {
     const cmd = chooseAttack(g, p, bot);
     expect(targetOf(g, cmd, 1)).toBe(3);
     expect(sent(cmd, p.troops)).toBeLessThanOrEqual(p.troops - reserve + 1e-6);
-    expect(sent(cmd, p.troops)).toBeCloseTo(p.troops - reserve, 6);
+    expect(sent(cmd, p.troops)).toBeGreaterThan(0);
     expect(applyCommand(g, cmd as Command)).toEqual({ ok: true });
     expect(g.nations[1].troops).toBeGreaterThanOrEqual(reserve - 1e-6);
   });
@@ -281,7 +285,8 @@ describe('chooseAttack', () => {
     const { aggression, opportunism } = PERSONALITY.aggressive;
     const sparser = 0.3; // b is thinner than a
     expect(scores[0].score).toBeCloseTo(est.tiles / est.attackerLoss * aggression * (1 + opportunism * sparser), 10);
-    expect(scores[0].troops).toBeCloseTo(budget, 10);
+    expect(scores[0].troops).toBeGreaterThan(0);
+    expect(scores[0].troops).toBeLessThanOrEqual(budget);
 
     // hard looks no further than the targets themselves and prefers weak c
     const hard = new Bot(g, 1, 'hard', 'aggressive', SEED);
@@ -307,6 +312,47 @@ describe('chooseAttack', () => {
     expect(share).toBeGreaterThan(DIFFICULTY.easy.mistakeChance - 0.1);
     expect(share).toBeLessThan(DIFFICULTY.easy.mistakeChance + 0.1);
     expect(picks('insane', 100)).toBe(0);
+  });
+});
+
+describe('attack pacing', () => {
+  it('commits no more troops than an attack can use before the next decisions', () => {
+    // a long open plain: the attack can only take a few tiles per tick
+    const g = makeTestGame({ map: ['#'.repeat(200)], owners: ['aa' + '.'.repeat(198)], nations: [{ troops: 100_000 }] });
+    const bot = new Bot(g, 1, 'insane', 'aggressive', SEED);
+    const [first] = scoreTargets(g, perceive(g, 1), bot);
+    expect(first.target).toBe(0);
+    const { frontFraction, minTilesPerTick, terrainCost, neutralCost } = CONFIG.combat;
+    const perTick = Math.max(minTilesPerTick, 1 * frontFraction);
+    const useful = perTick * bot.profile.reactionTicks * CONFIG.ai.paceMargin * terrainCost[1] * neutralCost;
+    expect(first.troops).toBeCloseTo(useful, 6);
+  });
+
+  it('spreads a budget one front cannot absorb over several targets', () => {
+    // a holds far more than an attack on either side can use: free land to the right, weak b to the left
+    const g = makeTestGame({
+      map: ['#'.repeat(60), '#'.repeat(60)],
+      owners: ['b'.repeat(10) + 'a'.repeat(10) + '.'.repeat(40), 'b'.repeat(10) + 'a'.repeat(10) + '.'.repeat(40)],
+      nations: [{ troops: 100_000 }, { troops: 100 }],
+    });
+    const p = perceive(g, 1);
+    // chooseAttack is the first of them
+    const first = chooseAttack(g, p, new Bot(g, 1, 'insane', 'aggressive', SEED));
+    const cmds = chooseAttacks(g, p, new Bot(g, 1, 'insane', 'aggressive', SEED));
+    expect(cmds[0]).toEqual(first);
+    expect(cmds.map((c) => targetOf(g, c, 1)).sort()).toEqual([0, 2]);
+    const total = cmds.reduce((sum, c) => sum + sent(c, p.troops), 0);
+    expect(total).toBeLessThanOrEqual(attackBudget(p, DIFFICULTY.insane) + 1e-6);
+    for (const c of cmds) expect(applyCommand(g, c)).toEqual({ ok: true });
+  });
+
+  it('tops up a running attack only to what it can use', () => {
+    const g = makeTestGame({ map: ['#'.repeat(200)], owners: ['aa' + '.'.repeat(198)], nations: [{ troops: 100_000 }] });
+    const bot = new Bot(g, 1, 'insane', 'aggressive', SEED);
+    const [cmd] = bot.think();
+    expect(applyCommand(g, cmd)).toEqual({ ok: true });
+    // the attack already holds all it can use: nothing more goes in
+    expect(scoreTargets(g, perceive(g, 1), bot).find((s) => s.target === 0)).toBeUndefined();
   });
 });
 
