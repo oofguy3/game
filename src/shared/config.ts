@@ -11,7 +11,8 @@ export const CONFIG = {
   },
   win: { landShare: 0.8 },
   troops: { baseMax: 5000, perTile: 40, baseGrowth: 2, growthRate: 0.02, overMaxDecay: 0.01 },
-  gold: { base: 1, perTile: 0.02 },
+  // tradeIncomeDecay: per-tick factor of the trade income moving average; trade gold adds gold × (1 − it)
+  gold: { base: 1, perTile: 0.02, tradeIncomeDecay: 0.99 },
   combat: { terrainCost: [0, 1.0, 1.5, 2.5], neutralCost: 2, baseCost: 3, densityFactor: 1.2,
             defenderLossFactor: 1, frontFraction: 0.25, minTilesPerTick: 1, maxTilesPerTick: 80,
             // smallest share of troops an attack command sends; random tie-break added to frontier priorities;

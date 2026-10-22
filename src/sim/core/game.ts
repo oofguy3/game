@@ -9,8 +9,10 @@ import { buildWaterNav } from '../map/waterNav';
 import type { WaterNav } from '../map/waterNav';
 import { stepAttacks } from '../systems/attacks';
 import type { Attack } from '../systems/attacks';
+import { stepEconomy } from '../systems/economy';
 import { Relations } from '../systems/relations';
 import { endSpawnPhase } from '../systems/spawn';
+import { checkVictory } from '../systems/victory';
 import { Rng } from '../util/rng';
 import { applyCommand } from './commands';
 import { nationNames } from './names';
@@ -113,11 +115,17 @@ export class Game {
   }
 
   /**
-   * Applies the queued commands in order, then advances the clock by one tick. In the spawn phase that is all it does,
-   * except that the phase ends (random starts for everyone left) once the clock reaches `spawnEndsAt`. While playing,
-   * the attacks advance before the clock does.
+   * Advances the game by one tick. Once the game has ended it does nothing: queued commands are dropped unapplied and
+   * the clock stops. Otherwise the queued commands apply in order first. In the spawn phase the clock then advances,
+   * and the phase ends (random starts for everyone left) once it reaches `spawnEndsAt`. While playing, the systems run
+   * in a fixed order and, when `checkVictory` is on, a win ends the game with a `gameOver` event before the clock
+   * advances.
    */
   step(): void {
+    if (this.phase === 'ended') {
+      this.pending = [];
+      return;
+    }
     const commands = this.pending;
     this.pending = [];
     for (const cmd of commands) applyCommand(this, cmd);
@@ -126,7 +134,19 @@ export class Game {
       if (this.tick >= this.spawnEndsAt) endSpawnPhase(this);
       return;
     }
-    if (this.phase === 'playing') stepAttacks(this);
+    // Task 10: stepBuildings
+    stepEconomy(this);
+    stepAttacks(this);
+    // Task 18: stepUnits
+    // Task 24: stepDiplomacy
+    if (this.checkVictory) {
+      const result = checkVictory(this);
+      if (result) {
+        this.result = result;
+        this.phase = 'ended';
+        this.emit({ type: 'gameOver', result });
+      }
+    }
     this.tick++;
   }
 

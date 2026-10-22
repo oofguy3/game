@@ -4,7 +4,7 @@ import type { Command, GameEvent, NationId } from '../../shared/types';
 import { applyCommand } from '../core/commands';
 import type { Game } from '../core/game';
 import { makeTestGame } from '../testing/fixtures';
-import { cancelAttacksBetween, landTroops, sharesBorder, startAttack } from './attacks';
+import { cancelAttacksBetween, landTroops, sharesBorder, startAttack, stepAttacks } from './attacks';
 import { tileCaptureCost } from './combat';
 
 const { baseCost, densityFactor, neutralCost, frontFraction, minTilesPerTick, maxTilesPerTick } = CONFIG.combat;
@@ -18,8 +18,9 @@ const ownedBy = (g: Game, id: NationId): number[] => {
   return tiles;
 };
 
+/** Advances only the attacks, `n` ticks, so the economy's troop growth doesn't blur the combat arithmetic. */
 const steps = (g: Game, n: number) => {
-  for (let i = 0; i < n; i++) g.step();
+  for (let i = 0; i < n; i++) stepAttacks(g);
 };
 
 /** Everything an invalid command must leave untouched. */
@@ -53,7 +54,7 @@ describe('attack command', () => {
   it('expands into neutral land and finishes', () => {
     const g = makeTestGame({ map: ['##########'], owners: ['a.........'], nations: [{ troops: 1000 }] });
     expect(applyCommand(g, { type: 'attack', nation: 1, tile: 5, ratio: 0.5 }).ok).toBe(true);
-    for (let i = 0; i < 50; i++) g.step();
+    steps(g, 50);
     expect(g.nations[1].tiles).toBe(10);
     expect(g.attacks).toHaveLength(0);
     expect(g.nations[1].troops).toBeLessThan(1000);
@@ -159,12 +160,12 @@ describe('stepAttacks', () => {
     expect(applyCommand(g, attack(1, 2, 0.5)).ok).toBe(true);
     g.drainEvents();
     const cost = baseCost + 50 * densityFactor; // b's density stays 50: it loses 50 troops per tile
-    g.step();
+    stepAttacks(g);
     expect(g.nations[2].tiles).toBe(1);
     expect(g.nations[2].troops).toBeCloseTo(50, 10);
     expect(g.attacks[0].troops).toBeCloseTo(500 - cost, 10);
     expect(g.nations[2].alive).toBe(true);
-    g.step();
+    stepAttacks(g);
     expect(g.nations[2].tiles).toBe(0);
     expect(g.nations[2].troops).toBeCloseTo(0, 10);
     expect(g.nations[2].alive).toBe(false);
@@ -184,7 +185,7 @@ describe('stepAttacks', () => {
     expect(applyCommand(g, attack(2, 2, 0.5)).ok).toBe(true);
     expect(g.nations[2].troops).toBe(100);
     g.drainEvents();
-    g.step();
+    stepAttacks(g);
     expect(g.nations[2].alive).toBe(false);
     expect(g.nations[2].troops).toBe(0);
     expect(g.attacks).toHaveLength(0);
@@ -197,7 +198,7 @@ describe('stepAttacks', () => {
     const g = makeTestGame({ map: ['###'], owners: ['abc'], nations: [{ troops: 1000 }, {}, { troops: 1000 }] });
     expect(applyCommand(g, attack(1, 1, 0.5)).ok).toBe(true);
     expect(applyCommand(g, attack(3, 1, 0.5)).ok).toBe(true);
-    g.step();
+    stepAttacks(g);
     expect(g.owner[1]).toBe(1);
     expect(g.nations[2].alive).toBe(false);
     expect(g.attacks).toHaveLength(0);
@@ -236,7 +237,7 @@ describe('stepAttacks', () => {
     });
     expect(applyCommand(g, attack(1, 1, 0.01)).ok).toBe(true);
     expect(applyCommand(g, attack(1, 61, 0.01)).ok).toBe(true);
-    g.step();
+    stepAttacks(g);
     expect(g.nations[2].alive).toBe(false);
     // the pocket (62-63) now touches a, but the corridor attack never saw it; a click there must reach it
     expect(applyCommand(g, attack(1, 62, 0.5)).ok).toBe(true);
@@ -255,11 +256,11 @@ describe('stepAttacks', () => {
     });
     expect(applyCommand(g, attack(1, 1, 0.5)).ok).toBe(true);
     expect(applyCommand(g, attack(2, 7, 0.5)).ok).toBe(true);
-    g.step();
+    stepAttacks(g);
     expect(g.owner[1]).toBe(1);
     // b's one speed point still paid for V after S turned out stale
     expect(g.owner[7]).toBe(2);
-    g.step();
+    stepAttacks(g);
     expect(g.attacks).toHaveLength(0);
     expect(g.nations[2].troops).toBe(1000 - neutralCost);
   });
@@ -285,7 +286,7 @@ describe('stepAttacks', () => {
         nations: [{ troops: 1e6 }],
       });
       applyCommand(g, attack(1, 1, 1));
-      g.step();
+      stepAttacks(g);
       return g.nations[1].tiles - rows;
     };
     expect(firstTick(1)).toBe(1);
@@ -307,7 +308,7 @@ describe('stepAttacks', () => {
       const gained: number[] = [];
       for (let i = 0; i < 30; i++) {
         const before = g.nations[1].tiles;
-        g.step();
+        stepAttacks(g);
         gained.push(g.nations[1].tiles - before);
         // the speed comes from the distinct live front, and superseded heap entries don't pile up
         const { queued, frontier } = g.attacks[0];
@@ -336,10 +337,10 @@ describe('stepAttacks', () => {
         nations: [{ troops: 1000 }, { troops: 1000 }],
         seed: 7,
       });
-      g.queue(attack(1, 1, 0.4));
-      g.queue(attack(2, 10, 0.4));
+      applyCommand(g, attack(1, 1, 0.4));
+      applyCommand(g, attack(2, 10, 0.4));
       steps(g, 15);
-      g.queue(attack(1, 6, 0.5));
+      applyCommand(g, attack(1, 6, 0.5));
       steps(g, 40);
       return g.owner;
     };

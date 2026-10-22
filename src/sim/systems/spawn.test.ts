@@ -394,9 +394,12 @@ describe('endSpawnPhase', () => {
       bots: Array.from({ length: 40 }, () => ({ difficulty: 'easy' as const })), spawnTicks: 1,
     });
     g.step();
+    // the phase ends on this step, before the economy has run
+    expect(g.phase).toBe('playing');
+    expect(g.alive().every((n) => n.troops === startTroops && n.gold === startGold)).toBe(true);
     g.step();
     expect(g.alive().filter((n) => n.spawned)).toHaveLength(41);
-    expect(g.alive().every((n) => n.tiles > 0 && n.troops === startTroops && n.gold === startGold)).toBe(true);
+    expect(g.alive().every((n) => n.tiles > 0)).toBe(true);
     expect(new Set(g.alive().map((n) => n.spawnTile)).size).toBe(41);
   });
 });

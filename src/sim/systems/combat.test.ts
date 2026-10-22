@@ -3,18 +3,21 @@ import { CONFIG } from '../../shared/config';
 import { Terrain } from '../../shared/types';
 import type { Game } from '../core/game';
 import { makeTestGame } from '../testing/fixtures';
-import { startAttack } from './attacks';
+import { startAttack, stepAttacks } from './attacks';
 import {
   defenderLossPerTile, defenseMultiplier, density, estimateConquest, tileCaptureCost,
 } from './combat';
 
 const { terrainCost, neutralCost, baseCost, densityFactor, defenderLossFactor } = CONFIG.combat;
 
-/** Steps until no attack is left (or `maxTicks` pass) and returns the number of ticks taken. */
+/**
+ * Advances only the attacks (no economy, so troop counts follow the combat rules alone) until none is left or
+ * `maxTicks` pass, and returns the number of ticks taken.
+ */
 function runAttacks(g: Game, maxTicks = 2000): number {
   let ticks = 0;
   while (g.attacks.length > 0 && ticks < maxTicks) {
-    g.step();
+    stepAttacks(g);
     ticks++;
   }
   return ticks;

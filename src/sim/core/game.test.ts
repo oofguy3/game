@@ -342,9 +342,10 @@ describe('applyCommand phase gating', () => {
   });
 });
 
+// Nation 1 holds no land in these tests, so the economy leaves its troops and gold alone.
 describe('Game.step', () => {
   it('applies queued commands in order, then advances the tick', () => {
-    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}, { alive: false }], debug: true });
+    const g = makeTestGame({ map: ['##'], nations: [{}, { alive: false }], debug: true });
     g.queue({ type: 'debugGrant', nation: 9, gold: 1 });
     g.queue({ type: 'debugGrant', nation: 1, gold: 5 });
     g.queue({ type: 'debugGrant', nation: 2, gold: 1 });
@@ -360,7 +361,7 @@ describe('Game.step', () => {
   });
 
   it('consumes the queue so commands apply only once', () => {
-    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
+    const g = makeTestGame({ map: ['##'], nations: [{}], debug: true });
     g.queue({ type: 'debugGrant', nation: 1, gold: 5 });
     g.step();
     g.step();
@@ -369,7 +370,7 @@ describe('Game.step', () => {
   });
 
   it('a command rejected by an earlier command still lets later ones run', () => {
-    const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
+    const g = makeTestGame({ map: ['##'], nations: [{}], debug: true });
     g.queue({ type: 'spawn', nation: 1, tile: 1 });
     g.queue({ type: 'debugGrant', nation: 1, troops: 3 });
     g.step();
