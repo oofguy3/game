@@ -284,7 +284,8 @@ describe('applyCommand', () => {
 
   it('rejects every other command type as not implemented, with one event each', () => {
     const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
-    const implemented = new Set(['attack', 'build', 'boat', 'buildUnit', 'moveUnit', 'bomb', 'paradrop']);
+    const implemented = new Set(['attack', 'build', 'boat', 'buildUnit', 'moveUnit', 'bomb', 'paradrop', 'proposeAlliance',
+      'breakAlliance', 'proposePeace', 'respond', 'embargo']);
     const unimplemented = GAMEPLAY_COMMANDS.filter((cmd) => !implemented.has(cmd.type));
     for (const cmd of unimplemented) {
       expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'not implemented' });

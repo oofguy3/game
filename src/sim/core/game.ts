@@ -10,6 +10,7 @@ import type { WaterNav } from '../map/waterNav';
 import { stepAttacks } from '../systems/attacks';
 import type { Attack } from '../systems/attacks';
 import { BuildingStore, onTileCaptured, stepBuildings } from '../systems/buildings';
+import { stepDiplomacy } from '../systems/diplomacy';
 import { stepEconomy } from '../systems/economy';
 import { Relations } from '../systems/relations';
 import { endSpawnPhase } from '../systems/spawn';
@@ -148,7 +149,7 @@ export class Game {
     stepEconomy(this);
     stepAttacks(this);
     stepUnits(this);
-    // Task 24: stepDiplomacy
+    stepDiplomacy(this);
     if (this.checkVictory) {
       const result = checkVictory(this);
       if (result) {

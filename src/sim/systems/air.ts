@@ -176,10 +176,13 @@ function stepBomber(game: Game, u: Unit): void {
   u.pathIndex = 0;
 }
 
-/** Destroys the target owner's buildings within `radius` of `tile` and kills troops for every tile of theirs there. */
+/**
+ * Destroys the target owner's buildings within `radius` of `tile` and kills troops for every tile of theirs there;
+ * nothing when the tile has since become ours or an ally's.
+ */
 function bomb(game: Game, by: NationId, tile: TileIndex, radius: number, killFactor: number): void {
   const owner = game.owner[tile];
-  if (owner === 0 || owner === by) return;
+  if (owner === 0 || owner === by || game.relations.get(by, owner) === 'allied') return;
   for (const b of buildingsInRadius(game, owner, BUILDING_TYPES, tile, radius)) destroyBuilding(game, b.id, by);
   const { map } = game;
   const cx = xOf(map, tile);

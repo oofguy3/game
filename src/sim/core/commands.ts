@@ -3,6 +3,7 @@ import type { Command, NationId, Phase } from '../../shared/types';
 import { buildFighter, launchBomber, launchParatroopers } from '../systems/air';
 import { attackCommand } from '../systems/attacks';
 import { build } from '../systems/buildings';
+import { breakAlliance, createRequest, respond, setEmbargo } from '../systems/diplomacy';
 import { buildWarship, launchBoat, moveWarship } from '../systems/naval';
 import { spawnNation } from '../systems/spawn';
 import type { Game } from './game';
@@ -78,14 +79,24 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
       return result.ok ? result : reject(game, nation, result.reason);
     }
     case 'proposeAlliance':
-    case 'breakAlliance':
+      return settle(game, nation, createRequest(game, 'alliance', nation, cmd.to));
     case 'proposePeace':
+      return settle(game, nation, createRequest(game, 'peace', nation, cmd.to));
+    case 'breakAlliance':
+      return settle(game, nation, breakAlliance(game, nation, cmd.with));
+    case 'respond':
+      return settle(game, nation, respond(game, nation, cmd.requestId, cmd.accept));
+    case 'embargo':
+      return settle(game, nation, setEmbargo(game, nation, cmd.with, cmd.on));
     case 'proposeDeal':
     case 'requestJointAttack':
-    case 'respond':
-    case 'embargo':
       return reject(game, nation, 'not implemented');
   }
+}
+
+/** Passes `result` on, emitting `rejected` when it is a failure. */
+function settle(game: Game, nation: NationId, result: CommandResult): CommandResult {
+  return result.ok ? result : reject(game, nation, result.reason);
 }
 
 function debugGrant(game: Game, cmd: Extract<Command, { type: 'debugGrant' }>): CommandResult {
