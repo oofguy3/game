@@ -4,6 +4,7 @@ import type { BuildingType, Command, NationId, TileIndex } from '../../shared/ty
 import type { Game } from '../core/game';
 import { distance, forEachNeighbor, inBounds, isLand, tileOf, xOf, yOf } from '../map/grid';
 import { buildingCost, canPlace } from '../systems/buildings';
+import type { Building } from '../systems/buildings';
 import type { Rng } from '../util/rng';
 import type { Bot } from './bot';
 import type { NeighborInfo, Perception } from './perception';
@@ -22,8 +23,10 @@ export function troopGoldValue(p: Perception): number {
 /**
  * Every building worth building, best first, valued as benefit per gold × the matching personality weight. Per-tick
  * benefits (gold, growth) count over `buildHorizonTicks`; troops convert to gold at `troopGoldValue`. Defenses are
- * worth something only against a front threat; ports only with someone to trade with. Naval bases, airports,
- * anti-air and radar come with the sea and air tasks.
+ * worth something only against a front threat; ports only with someone to trade with; naval bases only after an
+ * invasion by sea. A first airport is worth `airportValue` a tick to a bot that flies when an enemy is within its
+ * range; an anti-air gun `antiAirValue` per building of the biggest cluster an enemy airport can reach that no gun
+ * covers yet; a radar `radarValue` per anti-air gun no radar covers, once there are two.
  */
 export function rankBuilds(game: Game, p: Perception, bot: Bot): BuildPlan[] {
   const B = CONFIG.buildings;
@@ -42,9 +45,11 @@ export function rankBuilds(game: Game, p: Perception, bot: Bot): BuildPlan[] {
     navalBase: game.tick - bot.memory.lastNavalThreatTick <= CONFIG.ai.navalThreatTicks
       ? H * CONFIG.ai.navalUrgency * w.defense
       : 0,
-    airport: 0,
-    antiAir: 0,
-    radar: 0,
+    airport: bot.profile.air && game.buildings.ofNation(p.me, 'airport').length === 0 && enemyInAirRange(game, p)
+      ? H * CONFIG.ai.airportValue * w.aggression
+      : 0,
+    antiAir: (antiAirSite(game, p)?.count ?? 0) * CONFIG.ai.antiAirValue * H * w.defense,
+    radar: (radarSite(game, p.me)?.count ?? 0) * CONFIG.ai.radarValue * H * w.defense,
   };
   const plans: BuildPlan[] = [];
   for (const type of BUILDING_TYPES) {
@@ -89,13 +94,153 @@ const COAST_TYPES: readonly BuildingType[] = ['port', 'navalBase'];
  * - defenses go `frontInset` tiles inland from the border with the most threatening neighbour, where their radius
  *   covers the most of that border;
  * - ports and naval bases go on the coast, on the largest water body;
+ * - airports go as close to the border as they can while staying `airportDepth` tiles behind it;
+ * - anti-air guns and radars go as close as they can to the centre of the cluster they are to cover;
  * - everything else goes deep inside: of `interiorSamples` own tiles near the centroid, the farthest from the border
  *   with other nations.
  */
 export function findPlacement(game: Game, me: NationId, type: BuildingType, p: Perception, rng: Rng): TileIndex | null {
   if (FRONT_TYPES.includes(type)) return frontPlacement(game, me, type, p);
   if (COAST_TYPES.includes(type)) return coastPlacement(game, me, type);
+  if (type === 'airport') return airportPlacement(game, me, rng);
+  if (type === 'antiAir') return nearestPlaceable(game, me, type, antiAirSite(game, p)?.centre ?? null);
+  if (type === 'radar') return nearestPlaceable(game, me, type, radarSite(game, me)?.centre ?? null);
   return interiorPlacement(game, me, type, rng);
+}
+
+/** A spot to cover: a centre tile and how many things there would be covered. */
+export interface Site {
+  centre: TileIndex;
+  count: number;
+}
+
+/** The nations `p.me` treats as enemies: those at war with it and its neighbours it isn't allied with. */
+export function enemiesOf(p: Perception): Set<NationId> {
+  const enemies = new Set<NationId>(p.wars);
+  for (const n of p.neighbors) if (n.relation !== 'allied') enemies.add(n.id);
+  return enemies;
+}
+
+/** The airports, finished or not, of `p.me`'s enemies. */
+export function enemyAirports(game: Game, p: Perception): Building[] {
+  const out: Building[] = [];
+  for (const id of enemiesOf(p)) out.push(...game.buildings.ofNation(id, 'airport'));
+  return out;
+}
+
+/** Whether an enemy's land lies within `airport.range` of `p.me`'s centroid (its centroid, or our shared border). */
+function enemyInAirRange(game: Game, p: Perception): boolean {
+  const centre = centroidTile(game, p.me);
+  if (centre === null) return false;
+  const range = CONFIG.buildings.airport.range;
+  const { map } = game;
+  for (const id of enemiesOf(p)) {
+    const n = game.nations[id];
+    if (!n.alive || n.tiles === 0) continue;
+    if (Math.hypot(n.sumX / n.tiles - xOf(map, centre), n.sumY / n.tiles - yOf(map, centre)) <= range) return true;
+    for (const b of borderTouching(game, p.me, (owner) => owner === id)) {
+      if (distance(map, b, centre) <= range) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The cluster an anti-air gun should cover: of `p.me`'s buildings (guns aside) within an enemy airport's range and not
+ * yet within `antiAir.radius` of a gun of ours, the one with the most such buildings within that radius of it (the
+ * nearest to an enemy airport on a tie). Null when none is exposed.
+ */
+export function antiAirSite(game: Game, p: Perception): Site | null {
+  const threats = enemyAirports(game, p);
+  if (threats.length === 0) return null;
+  const { map } = game;
+  const radius = CONFIG.buildings.antiAir.radius;
+  const range = CONFIG.buildings.airport.range;
+  const guns = game.buildings.ofNation(p.me, 'antiAir');
+  const reach = (t: TileIndex): number => Math.min(...threats.map((a) => distance(map, a.tile, t)));
+  const exposed = game.buildings.ofNation(p.me).filter((b) => b.type !== 'antiAir'
+    && !guns.some((g) => distance(map, g.tile, b.tile) <= radius) && reach(b.tile) <= range);
+  return densest(map, exposed, radius, reach);
+}
+
+/**
+ * The cluster a radar should cover: of `me`'s anti-air guns not within `radar.radius` of one of its radars (two at
+ * least), the one with the most such guns within that radius. Null otherwise.
+ */
+export function radarSite(game: Game, me: NationId): Site | null {
+  const { map } = game;
+  const radius = CONFIG.buildings.radar.radius;
+  const radars = game.buildings.ofNation(me, 'radar');
+  const bare = game.buildings.ofNation(me, 'antiAir').filter((g) => !radars.some((r) => distance(map, r.tile, g.tile) <= radius));
+  if (bare.length < 2) return null;
+  return densest(map, bare, radius, () => 0);
+}
+
+/** The building of `group` with the most of `group` within `radius` (itself included); ties go to the lowest `tieBreak`. */
+function densest(map: Game['map'], group: Building[], radius: number, tieBreak: (t: TileIndex) => number): Site | null {
+  let best: Site | null = null;
+  let bestTie = Infinity;
+  for (const b of group) {
+    let count = 0;
+    for (const o of group) if (distance(map, o.tile, b.tile) <= radius) count++;
+    const tie = tieBreak(b.tile);
+    if (best === null || count > best.count || (count === best.count && tie < bestTie)) {
+      best = { centre: b.tile, count };
+      bestTie = tie;
+    }
+  }
+  return best;
+}
+
+/** The placeable tile nearest `centre` within `siteSearch` tiles of it; null if none (or no centre). */
+function nearestPlaceable(game: Game, me: NationId, type: BuildingType, centre: TileIndex | null): TileIndex | null {
+  if (centre === null) return null;
+  const { map } = game;
+  const r = CONFIG.ai.siteSearch;
+  const cx = xOf(map, centre);
+  const cy = yOf(map, centre);
+  let best: TileIndex | null = null;
+  let bestD = Infinity;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const d = Math.hypot(dx, dy);
+      if (d > r || d >= bestD || !inBounds(map, cx + dx, cy + dy)) continue;
+      const t = tileOf(map, cx + dx, cy + dy);
+      if (!placeable(game, me, type, t)) continue;
+      best = t;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Of up to `airportSamples` own tiles near the centroid (from a search of `airportSearch` tiles), the one closest to
+ * the border with other nations while at least `airportDepth` tiles from it; the deepest when none is that deep.
+ */
+function airportPlacement(game: Game, me: NationId, rng: Rng): TileIndex | null {
+  const { airportDepth, airportSearch, airportSamples } = CONFIG.ai;
+  const region = ownTilesAround(game, me, centroidTile(game, me), airportSearch);
+  if (region.length === 0) return null;
+  const candidates: TileIndex[] = [];
+  if (region.length <= airportSamples) candidates.push(...region);
+  else for (let i = 0; i < airportSamples; i++) candidates.push(region[rng.int(0, region.length - 1)]);
+
+  const edge = foreignBorder(game, me);
+  let best: TileIndex | null = null;
+  let bestKey = Infinity;
+  for (const t of candidates) {
+    if (!placeable(game, me, 'airport', t)) continue;
+    let depth = Infinity;
+    for (const e of edge) depth = Math.min(depth, distance(game.map, t, e));
+    // deep enough: the shallowest wins; too shallow: ranked after all of those, the deepest first
+    const key = depth >= airportDepth ? depth : 1e9 - depth;
+    if (key < bestKey) {
+      best = t;
+      bestKey = key;
+    }
+  }
+  return best;
 }
 
 function placeable(game: Game, me: NationId, type: BuildingType, tile: TileIndex): boolean {
@@ -238,7 +383,7 @@ function hasTradePartner(game: Game, me: NationId): boolean {
 }
 
 /** An owned tile at or near `me`'s centroid (the first border tile if the centroid isn't ours). */
-function centroidTile(game: Game, me: NationId): TileIndex | null {
+export function centroidTile(game: Game, me: NationId): TileIndex | null {
   const n = game.nations[me];
   if (n.tiles === 0) return null;
   const t = tileOf(game.map, Math.round(n.sumX / n.tiles), Math.round(n.sumY / n.tiles));
@@ -273,7 +418,7 @@ function foreignBorder(game: Game, me: NationId): TileIndex[] {
 }
 
 /** Up to `borderSamples` of `me`'s border tiles with a 4-neighbour whose owner passes `test`, in border order. */
-function borderTouching(game: Game, me: NationId, test: (owner: NationId) => boolean): TileIndex[] {
+export function borderTouching(game: Game, me: NationId, test: (owner: NationId) => boolean): TileIndex[] {
   const out: TileIndex[] = [];
   for (const b of game.nations[me].border) {
     let hit = false;

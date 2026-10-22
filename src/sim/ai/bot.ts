@@ -1,6 +1,9 @@
+import { CONFIG } from '../../shared/config';
 import type { Command, Difficulty, NationId, Personality, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
+import { buildingCost } from '../systems/buildings';
 import { Rng } from '../util/rng';
+import { chooseParadrop, manageAirDefense, planCombinedArms } from './air';
 import { chooseBuild } from './economy';
 import { chooseAttacks } from './military';
 import { chooseInvasion, manageWarships } from './naval';
@@ -68,19 +71,75 @@ export class Bot {
     return this.decide();
   }
 
-  /** The decisions themselves, made only while the game is being played. */
+  /**
+   * The decisions themselves, made only while the game is being played: an attack held back for bombs once they
+   * should have fallen; a building; attacks (one on a fortified front may wait for bombs first, and the held target is
+   * left alone meanwhile); an invasion when nothing else is going on; paratroopers with what the budget has left; and
+   * the warships and fighters. A held target that attacks us is answered at once instead.
+   */
   protected decide(): Command[] {
-    const p = perceive(this.game, this.id);
+    const game = this.game;
+    let p = perceive(game, this.id);
     const commands: Command[] = [];
-    const build = chooseBuild(this.game, p, this);
-    if (build) commands.push(build);
-    const attacks = chooseAttacks(this.game, p, this);
-    commands.push(...attacks);
-    if (attacks.length === 0) {
-      const invasion = chooseInvasion(this.game, p, this);
-      if (invasion) commands.push(invasion);
+    // each command's gold comes off what the later decisions of this think see
+    const issue = (cmd: Command): void => {
+      commands.push(cmd);
+      const gold = commandGold(game, cmd);
+      if (gold > 0) p = { ...p, gold: p.gold - gold };
+    };
+    let spent = 0;
+    let held: NationId | null = null;
+    const pending = this.memory.pendingAttack;
+    if (pending) {
+      if (p.neighbors.some((n) => n.id === pending.target && n.attackingMe > 0)) {
+        this.memory.pendingAttack = null;
+      } else {
+        held = pending.target;
+        if (game.tick >= pending.at) {
+          this.memory.pendingAttack = null;
+          issue({ type: 'attack', nation: this.id, tile: pending.tile, ratio: pending.ratio });
+          spent += pending.ratio * p.troops;
+        }
+      }
     }
-    commands.push(...manageWarships(this.game, p, this));
+    const build = chooseBuild(game, p, this);
+    if (build) issue(build);
+    let attacked = false;
+    let bombing = false;
+    for (const attack of chooseAttacks(game, p, this)) {
+      if (attack.type !== 'attack' || (held !== null && game.owner[attack.tile] === held)) continue;
+      const bombs = planCombinedArms(game, p, this, attack);
+      if (bombs.length > 0) {
+        bombs.forEach(issue);
+        bombing = true;
+        continue;
+      }
+      issue(attack);
+      spent += attack.ratio * p.troops;
+      attacked = true;
+    }
+    if (!attacked && held === null && !bombing) {
+      const invasion = chooseInvasion(game, p, this);
+      if (invasion) issue(invasion);
+    }
+    if (!bombing) {
+      const drop = chooseParadrop(game, p, this, spent);
+      if (drop) issue(drop);
+    }
+    manageWarships(game, p, this).forEach(issue);
+    manageAirDefense(game, p, this).forEach(issue);
     return commands;
+  }
+}
+
+/** The gold `cmd` costs when it goes through (0 for commands that cost none). */
+function commandGold(game: Game, cmd: Command): number {
+  const U = CONFIG.units;
+  switch (cmd.type) {
+    case 'build': return buildingCost(game, cmd.nation, cmd.building);
+    case 'bomb': return U.bomber.cost;
+    case 'paradrop': return U.paraPlane.cost;
+    case 'buildUnit': return cmd.unit === 'warship' ? U.warship.cost : U.fighter.cost;
+    default: return 0;
   }
 }

@@ -75,6 +75,16 @@ export const CONFIG = {
         // and how many warships it keeps per naval base
         navalThreatTicks: 600, navalUrgency: 60, warshipsPerBase: 2,
         // ports are worth this much more when there is somewhere overseas to invade
-        portInvasionBonus: 1.5 },
+        portInvasionBonus: 1.5,
+        // air: per-tick worth of a first airport with an enemy in its range, of each exposed building an anti-air gun
+        // would cover and of each anti-air gun a radar would cover
+        airportValue: 12, antiAirValue: 4, radarValue: 3,
+        // airports sit at least this deep behind the border; own tiles searched around the centroid and sampled
+        airportDepth: 20, airportSearch: 2400, airportSamples: 300,
+        // how far from a cluster's centre an anti-air gun or radar may go
+        siteSearch: 10,
+        // bombing first: the front defense worth softening, and how far behind the border its defenses may stand;
+        // paradrops: how far behind the front a target must be, and the radius that groups buildings into a cluster
+        bombDefense: 1.2, bombReach: 25, paraDepth: 15, paraClusterRadius: 10 },
   client: { labelEveryTicks: 20, maxCatchUpTicks: 8 },
 } as const;
