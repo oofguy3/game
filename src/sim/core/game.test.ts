@@ -282,17 +282,19 @@ describe('applyCommand', () => {
     expect(g.drainEvents()).toEqual([{ type: 'rejected', nation: 1, reason }]);
   });
 
-  it('rejects every other command type as not implemented, with one event each', () => {
+  it('every command type has a handler: none is rejected as not implemented, each rejection emits one event', () => {
     const g = makeTestGame({ map: ['##'], owners: ['a.'], nations: [{}], debug: true });
-    const implemented = new Set(['attack', 'build', 'boat', 'buildUnit', 'moveUnit', 'bomb', 'paradrop', 'proposeAlliance',
-      'breakAlliance', 'proposePeace', 'respond', 'embargo']);
-    const unimplemented = GAMEPLAY_COMMANDS.filter((cmd) => !implemented.has(cmd.type));
-    for (const cmd of unimplemented) {
-      expect(applyCommand(g, cmd)).toEqual({ ok: false, reason: 'not implemented' });
+    let failures = 0;
+    for (const cmd of GAMEPLAY_COMMANDS) {
+      const result = applyCommand(g, cmd);
+      if (!result.ok) {
+        failures++;
+        expect(result.reason).not.toBe('not implemented');
+      }
     }
-    const events = g.drainEvents();
-    expect(events).toHaveLength(unimplemented.length);
-    expect(events.every((e) => e.type === 'rejected' && e.nation === 1 && e.reason === 'not implemented')).toBe(true);
+    expect(failures).toBeGreaterThan(0);
+    const events = g.drainEvents().filter((e) => e.type === 'rejected');
+    expect(events).toHaveLength(failures);
   });
 });
 

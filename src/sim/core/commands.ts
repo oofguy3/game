@@ -3,7 +3,7 @@ import type { Command, NationId, Phase } from '../../shared/types';
 import { buildFighter, launchBomber, launchParatroopers } from '../systems/air';
 import { attackCommand } from '../systems/attacks';
 import { build } from '../systems/buildings';
-import { breakAlliance, createRequest, respond, setEmbargo } from '../systems/diplomacy';
+import { breakAlliance, createRequest, proposeDeal, requestJointAttack, respond, setEmbargo } from '../systems/diplomacy';
 import { buildWarship, launchBoat, moveWarship } from '../systems/naval';
 import { spawnNation } from '../systems/spawn';
 import type { Game } from './game';
@@ -30,10 +30,7 @@ function allowedInPhase(type: Command['type'], phase: Phase): boolean {
   }
 }
 
-/**
- * Validates and applies one command on behalf of `cmd.nation`. Every rejection emits exactly one `rejected` event.
- * Later tasks replace the 'not implemented' cases with real handlers.
- */
+/** Validates and applies one command on behalf of `cmd.nation`. Every rejection emits exactly one `rejected` event. */
 export function applyCommand(game: Game, cmd: Command): CommandResult {
   const nation = cmd.nation;
   if (!Number.isInteger(nation) || nation < 1 || nation >= game.nations.length) {
@@ -89,8 +86,9 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
     case 'embargo':
       return settle(game, nation, setEmbargo(game, nation, cmd.with, cmd.on));
     case 'proposeDeal':
+      return settle(game, nation, proposeDeal(game, nation, cmd.to, cmd.deal));
     case 'requestJointAttack':
-      return reject(game, nation, 'not implemented');
+      return settle(game, nation, requestJointAttack(game, nation, cmd.to, cmd.target));
   }
 }
 

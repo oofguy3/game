@@ -38,21 +38,79 @@ export function createRequest(
 
 /**
  * `nation` answers request `requestId`, which must be addressed to it. An accepted alliance makes the pair allies and
- * ends every attack between them; accepted peace ends their war the same way (if they are still at war). The request
- * is resolved either way.
+ * ends every attack between them; accepted peace ends their war the same way (if they are still at war); an accepted
+ * deal changes hands if both sides can still pay, else it resolves as not accepted. The request is resolved either way.
  */
 export function respond(game: Game, nation: NationId, requestId: number, accept: boolean): CommandResult {
   const request = game.requests.get(requestId);
   if (!request) return fail('no such request');
   if (request.to !== nation) return fail('not addressed to you');
   game.requests.delete(requestId);
+  let accepted = accept;
   if (accept) {
     const { from, to } = request;
     if (request.kind === 'alliance') makeRelation(game, from, to, 'allied');
     else if (request.kind === 'peace' && game.relations.get(from, to) === 'war') makeRelation(game, from, to, 'neutral');
+    else if (request.kind === 'deal' && request.deal) accepted = settleDeal(game, from, to, request.deal);
   }
-  resolve(game, request, accept);
+  resolve(game, request, accepted);
   return { ok: true };
+}
+
+/**
+ * Offers `to` a deal: `from` gives `giveGold` and `giveTroops` for `getGold` and `getTroops` (a gift asks for nothing).
+ * Every amount must be a finite number ≥ 0, not all 0, and `from` must be able to pay its side now.
+ */
+export function proposeDeal(game: Game, from: NationId, to: NationId, deal: Deal): CommandResult {
+  const problem = counterpartProblem(game, from, to);
+  if (problem) return fail(problem);
+  const amounts = [deal?.giveGold, deal?.giveTroops, deal?.getGold, deal?.getTroops];
+  if (!amounts.every((a) => typeof a === 'number' && Number.isFinite(a) && a >= 0) || !amounts.some((a) => a > 0)) {
+    return fail('bad deal');
+  }
+  const short = shortfall(game, from, deal.giveGold, deal.giveTroops);
+  if (short) return fail(short);
+  const { giveGold, giveTroops, getGold, getTroops } = deal;
+  return createRequest(game, 'deal', from, to, { deal: { giveGold, giveTroops, getGold, getTroops } });
+}
+
+/** What `nation` lacks to pay `gold` and `troops`, or null if it can. */
+function shortfall(game: Game, nation: NationId, gold: number, troops: number): string | null {
+  const n = game.nations[nation];
+  if (n.gold < gold) return 'not enough gold';
+  if (n.troops < troops) return 'not enough troops';
+  return null;
+}
+
+/** Carries out an accepted deal if both sides can still pay; whether it went through. */
+function settleDeal(game: Game, from: NationId, to: NationId, deal: Deal): boolean {
+  const a = game.nations[from];
+  const b = game.nations[to];
+  if (!a.alive || !b.alive) return false;
+  if (shortfall(game, from, deal.giveGold, deal.giveTroops) || shortfall(game, to, deal.getGold, deal.getTroops)) return false;
+  a.gold += deal.getGold - deal.giveGold;
+  b.gold += deal.giveGold - deal.getGold;
+  a.troops += deal.getTroops - deal.giveTroops;
+  b.troops += deal.giveTroops - deal.getTroops;
+  return true;
+}
+
+/**
+ * Asks ally `to` to join an attack on `target`, a living nation allied to neither. Accepting is a promise: it changes
+ * nothing by itself (bots act on it).
+ */
+export function requestJointAttack(game: Game, from: NationId, to: NationId, target: NationId): CommandResult {
+  const problem = counterpartProblem(game, from, to);
+  if (problem) return fail(problem);
+  if (game.relations.get(from, to) !== 'allied') return fail('not allied');
+  if (!Number.isInteger(target) || target < 1 || target >= game.nations.length || target === from || target === to) {
+    return fail('bad target');
+  }
+  if (!game.nations[target].alive) return fail('eliminated');
+  if (game.relations.get(from, target) === 'allied' || game.relations.get(to, target) === 'allied') {
+    return fail('target is an ally');
+  }
+  return createRequest(game, 'jointAttack', from, to, { target });
 }
 
 /** Sets the pair's relation, ends the attacks between them and emits `relation` if it changed. */
