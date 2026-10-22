@@ -7,7 +7,7 @@ import { makeTestGame } from '../testing/fixtures';
 import { cancelAttacksBetween, landTroops, sharesBorder, startAttack } from './attacks';
 import { tileCaptureCost } from './combat';
 
-const { baseCost, densityFactor, neutralCost, frontFraction, maxTilesPerTick } = CONFIG.combat;
+const { baseCost, densityFactor, neutralCost, frontFraction, minTilesPerTick, maxTilesPerTick } = CONFIG.combat;
 
 const attack = (nation: NationId, tile: number, ratio: number, allowBoat?: boolean): Command =>
   ({ type: 'attack', nation, tile, ratio, ...(allowBoat === undefined ? {} : { allowBoat }) });
@@ -227,6 +227,27 @@ describe('stepAttacks', () => {
     expect(g.attacks[0].troops).toBe(100 + 450);
   });
 
+  it('a second attack also takes land that has come within reach since the first began', () => {
+    // row 0: a and a long unowned corridor; row 2: a, b (its only tile, no troops), then a pocket only b touches
+    const g = makeTestGame({
+      map: ['#'.repeat(30), '.'.repeat(30), '####' + '.'.repeat(26)],
+      owners: ['a' + '.'.repeat(29), '.'.repeat(30), 'ab' + '.'.repeat(28)],
+      nations: [{ troops: 10000 }, { troops: 0 }],
+    });
+    expect(applyCommand(g, attack(1, 1, 0.01)).ok).toBe(true);
+    expect(applyCommand(g, attack(1, 61, 0.01)).ok).toBe(true);
+    g.step();
+    expect(g.nations[2].alive).toBe(false);
+    // the pocket (62-63) now touches a, but the corridor attack never saw it; a click there must reach it
+    expect(applyCommand(g, attack(1, 62, 0.5)).ok).toBe(true);
+    expect(g.attacks).toHaveLength(1);
+    steps(g, 10);
+    expect([g.owner[62], g.owner[63]]).toEqual([1, 1]);
+    // ... while the corridor attack is still under way
+    expect(g.attacks).toHaveLength(1);
+    expect(g.owner[29]).toBe(0);
+  });
+
   it('skips frontier tiles that changed hands without spending speed on them', () => {
     // b's frontier: S (tile 1, two b neighbours, popped first) and V (tile 7, one b neighbour). a takes S first.
     const g = makeTestGame({
@@ -270,6 +291,41 @@ describe('stepAttacks', () => {
     expect(firstTick(1)).toBe(1);
     expect(firstTick(10)).toBe(Math.ceil(10 * frontFraction));
     expect(firstTick(400)).toBe(maxTilesPerTick);
+  });
+
+  it('a straight front keeps the speed of its width, tick after tick', () => {
+    const rows = 40;
+    const width = 40;
+    const perTick = Math.min(maxTilesPerTick, Math.max(minTilesPerTick, rows * frontFraction));
+    const gains = (target: 'b' | '.') => {
+      const g = makeTestGame({
+        map: Array.from({ length: rows }, () => '#'.repeat(width)),
+        owners: Array.from({ length: rows }, () => 'a' + target.repeat(width - 1)),
+        nations: target === 'b' ? [{ troops: 1e7 }, { troops: 1000 }] : [{ troops: 1e7 }],
+      });
+      expect(applyCommand(g, attack(1, 1, 1)).ok).toBe(true);
+      const gained: number[] = [];
+      for (let i = 0; i < 30; i++) {
+        const before = g.nations[1].tiles;
+        g.step();
+        gained.push(g.nations[1].tiles - before);
+        // the speed comes from the distinct live front, and superseded heap entries don't pile up
+        const { queued, frontier } = g.attacks[0];
+        expect(queued.size).toBeGreaterThanOrEqual(rows);
+        expect(queued.size).toBeLessThanOrEqual(rows * 1.2);
+        expect(frontier.size).toBeLessThanOrEqual(3 * queued.size);
+      }
+      return gained;
+    };
+    for (const target of ['.', 'b'] as const) {
+      const gained = gains(target);
+      // the front stays 40 tiles wide (give or take a ragged edge), so every tick takes about 40 × frontFraction
+      for (const n of gained) {
+        expect(n).toBeGreaterThanOrEqual(perTick);
+        expect(n).toBeLessThanOrEqual(perTick * 1.2);
+      }
+      expect(gained.slice(10).reduce((s, n) => s + n, 0)).toBeLessThanOrEqual(20 * perTick * 1.1);
+    }
   });
 
   it('is deterministic for a seed', () => {

@@ -13,8 +13,10 @@ export interface Attack {
   /** 0 = unowned land. */
   target: NationId;
   troops: number;
-  /** Target tiles next to the attacker, most-surrounded first. May hold stale entries, skipped when popped. */
+  /** Target tiles next to the attacker, most-surrounded first. Entries `queued` doesn't match are stale and skipped. */
   frontier: MaxHeap;
+  /** Each tile queued in `frontier`, with the priority of its live entry. Its size is the width of the front. */
+  queued: Map<TileIndex, number>;
   /** Speed points carried between ticks; negative while a costly tile is still being paid off. */
   progress: number;
 }
@@ -33,9 +35,10 @@ export function sharesBorder(game: Game, a: NationId, b: NationId): boolean {
  * Sends `troops` from `attacker`'s pool against `target` (0 = unowned land). Rejected for the attacker itself, an
  * ally, a target with no shared border unless a `seedTile` (a beachhead the attacker holds) is given, and fewer than
  * one troop. The troops first cancel out against any attack the target has running against the attacker, both sides
- * losing the smaller amount; what is left joins the attacker's existing attack on the target, or starts a new one
- * whose frontier is every target tile touching the attacker's border and the seed tile. Attacking a nation declares
- * war on it. Reports the reason on failure without emitting `rejected`; `applyCommand` does that.
+ * losing the smaller amount; what is left joins the attacker's existing attack on the target, or starts a new one.
+ * Either way every target tile touching the attacker's border or the seed tile joins the frontier, so land that has
+ * come within reach since an attack began is taken too. Attacking a nation declares war on it. Reports the reason on
+ * failure without emitting `rejected`; `applyCommand` does that.
  */
 export function startAttack(
   game: Game, attacker: NationId, target: NationId, troops: number, seedTile?: TileIndex,
@@ -52,22 +55,17 @@ export function startAttack(
   const remaining = troops - cancelCounterattack(game, attacker, target, troops);
   if (remaining <= 0) return { ok: true };
 
-  const existing = game.attacks.find((a) => a.attacker === attacker && a.target === target);
-  if (existing) {
-    existing.troops += remaining;
-    if (seedTile !== undefined) pushTargetNeighbours(game, existing, seedTile);
-    return { ok: true };
+  let attack = game.attacks.find((a) => a.attacker === attacker && a.target === target);
+  if (attack) {
+    attack.troops += remaining;
+  } else {
+    attack = {
+      id: game.nextId(), attacker, target, troops: remaining, frontier: new MaxHeap(), queued: new Map(), progress: 0,
+    };
+    game.attacks.push(attack);
   }
-
-  const attack: Attack = { id: game.nextId(), attacker, target, troops: remaining, frontier: new MaxHeap(), progress: 0 };
-  const initial = new Set<TileIndex>();
-  const collect = (t: TileIndex): void => {
-    if (isTargetTile(game, t, target)) initial.add(t);
-  };
-  for (const b of game.nations[attacker].border) forEachNeighbor(game.map, b, collect);
-  if (seedTile !== undefined) forEachNeighbor(game.map, seedTile, collect);
-  for (const t of initial) pushFrontier(game, attack, t);
-  game.attacks.push(attack);
+  for (const b of game.nations[attacker].border) pushTargetNeighbours(game, attack, b);
+  if (seedTile !== undefined) pushTargetNeighbours(game, attack, seedTile);
   return { ok: true };
 }
 
@@ -111,7 +109,7 @@ export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops
 }
 
 /**
- * Advances every attack by one tick. Each earns speed points from its frontier size, clamped to
+ * Advances every attack by one tick. Each earns speed points from the width of its front (its queued tiles), clamped to
  * [`minTilesPerTick`, `maxTilesPerTick`], and spends them on tiles at their terrain cost, highest priority first; a
  * shortfall carries over as debt. An attack ends, returning its troops, when its frontier runs dry, it can't pay for
  * the next tile, or its target is eliminated.
@@ -137,7 +135,8 @@ export function cancelAttacksBetween(game: Game, a: NationId, b: NationId): void
 function advance(game: Game, attack: Attack): boolean {
   const { frontFraction, minTilesPerTick, maxTilesPerTick, terrainCost } = CONFIG.combat;
   if (!targetAlive(game, attack)) return false;
-  attack.progress += Math.min(maxTilesPerTick, Math.max(minTilesPerTick, attack.frontier.size * frontFraction));
+  compactFrontier(attack);
+  attack.progress += Math.min(maxTilesPerTick, Math.max(minTilesPerTick, attack.queued.size * frontFraction));
   while (attack.progress > 0) {
     const tile = popFrontier(game, attack);
     if (tile === undefined) return false;
@@ -202,12 +201,28 @@ function targetAlive(game: Game, attack: Attack): boolean {
   return attack.target === 0 || game.nations[attack.target].alive;
 }
 
-/** Pops frontier tiles until one is still the target's and still touches the attacker; undefined when none is. */
+/**
+ * Dequeues frontier tiles, highest priority first, until one is still the target's and still touches the attacker;
+ * undefined when none is. Entries superseded by a later, higher one for the same tile are skipped.
+ */
 function popFrontier(game: Game, attack: Attack): TileIndex | undefined {
-  for (let t = attack.frontier.pop(); t !== undefined; t = attack.frontier.pop()) {
+  const { frontier, queued } = attack;
+  while (frontier.size > 0) {
+    const priority = frontier.peekPriority();
+    const t = frontier.pop() as TileIndex;
+    if (queued.get(t) !== priority) continue;
+    queued.delete(t);
     if (game.owner[t] === attack.target && countOwnedNeighbours(game, t, attack.attacker) > 0) return t;
   }
   return undefined;
+}
+
+/** Rebuilds `attack.frontier` from its live entries once the stale ones outnumber them. */
+function compactFrontier(attack: Attack): void {
+  const { frontier, queued } = attack;
+  if (frontier.size <= 2 * queued.size) return;
+  frontier.clear();
+  for (const [t, priority] of queued) frontier.push(t, priority);
 }
 
 function pushTargetNeighbours(game: Game, attack: Attack, tile: TileIndex): void {
@@ -216,9 +231,17 @@ function pushTargetNeighbours(game: Game, attack: Attack, tile: TileIndex): void
   });
 }
 
-/** Priority = attacker-owned 4-neighbours + a random tie-break in [0, `frontierJitter`), drawn from `game.rng`. */
+/**
+ * Queues `tile` with priority = attacker-owned 4-neighbours + a random tie-break in [0, `frontierJitter`), drawn from
+ * `game.rng`. A tile already queued is queued again only once its neighbour count exceeds its queued priority, which
+ * leaves the old entry stale; otherwise nothing changes and no random number is drawn.
+ */
 function pushFrontier(game: Game, attack: Attack, tile: TileIndex): void {
-  const priority = countOwnedNeighbours(game, tile, attack.attacker) + game.rng.next() * CONFIG.combat.frontierJitter;
+  const owned = countOwnedNeighbours(game, tile, attack.attacker);
+  const queuedPriority = attack.queued.get(tile);
+  if (queuedPriority !== undefined && owned <= queuedPriority) return;
+  const priority = owned + game.rng.next() * CONFIG.combat.frontierJitter;
+  attack.queued.set(tile, priority);
   attack.frontier.push(tile, priority);
 }
 
