@@ -45,6 +45,12 @@ export const CONFIG = {
   ai: { buildingTileValue: 40, neutralBias: 1.5, minAttackScore: 0.01, secondFrontPenalty: 0.4, gangUpShare: 0.35,
         counterRiskWeight: 2, minParaTroops: 2000, proposalCooldownTicks: 300, saveHorizonTicks: 300,
         // shared-border tiles per neighbour whose defense multiplier perception averages
-        defenseSamples: 16 },
+        defenseSamples: 16,
+        // reserve held per incoming attacking troop; share of a stronger neutral neighbour's troops treated as a threat
+        incomingReserve: 1.2, strongNeutralShare: 0.3,
+        // share of the troops above the reserve sent into free land while inside the troop band
+        expandShare: 0.5,
+        // a counterattack sends this many troops per troop attacking us
+        counterattackFactor: 1.1 },
   client: { labelEveryTicks: 20, maxCatchUpTicks: 8 },
 } as const;

@@ -1,6 +1,8 @@
 import type { Command, Difficulty, NationId, Personality, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
 import { Rng } from '../util/rng';
+import { chooseAttack } from './military';
+import { perceive } from './perception';
 import { DIFFICULTY, PERSONALITY } from './profile';
 import type { DifficultyProfile, PersonalityWeights } from './profile';
 
@@ -63,7 +65,10 @@ export class Bot {
 
   /** The decisions themselves, made only while the game is being played. */
   protected decide(): Command[] {
-    // Tasks 12 onward add the decision modules here.
-    return [];
+    const p = perceive(this.game, this.id);
+    const commands: Command[] = [];
+    const attack = chooseAttack(this.game, p, this);
+    if (attack) commands.push(attack);
+    return commands;
   }
 }

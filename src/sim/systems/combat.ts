@@ -42,11 +42,8 @@ export function defenseMultiplier(game: Game, tile: TileIndex): number {
  * terrain cost × (`baseCost` + owner density × `densityFactor`) × the tile's defense multiplier.
  */
 export function tileCaptureCost(game: Game, attacker: NationId, tile: TileIndex): number {
-  const { terrainCost, neutralCost, baseCost, densityFactor } = CONFIG.combat;
-  const t = terrainCost[game.map.terrain[tile]];
   const owner = game.owner[tile];
-  if (owner === 0) return t * neutralCost;
-  return t * (baseCost + density(game.nations[owner]) * densityFactor) * defenseMultiplier(game, tile);
+  return captureCostAt(game, tile, owner === 0 ? 0 : density(game.nations[owner]));
 }
 
 /** Troops the owner of `tile` loses when it is taken: owner density × `defenderLossFactor`; 0 on unowned land. */
@@ -61,21 +58,36 @@ export function isTargetTile(game: Game, tile: TileIndex, target: NationId): boo
   return game.owner[tile] === target && (target !== 0 || game.map.terrain[tile] !== Terrain.Water);
 }
 
+export interface EstimateOptions {
+  /** Price the target as if it held this many troops instead of its current count (what-if questions). */
+  defenderTroops?: number;
+}
+
 /**
  * What sending `troops` from `attacker` against `target` (0 = unowned land) would likely achieve. Averages the capture
  * cost over up to `estimateSamples` frontier tiles (target tiles touching the attacker's border), then takes as many
  * tiles as the troops pay for, at most the target's tiles (for unowned land: the unowned tiles of the landmasses the
  * sampled frontier lies on). Losses follow from that tile count. Pure: changes nothing and draws no random numbers.
+ * Ignores the defender's troop growth while the attack runs.
  */
-export function estimateConquest(game: Game, attacker: NationId, target: NationId, troops: number): ConquestEstimate {
+export function estimateConquest(
+  game: Game,
+  attacker: NationId,
+  target: NationId,
+  troops: number,
+  opts: EstimateOptions = {},
+): ConquestEstimate {
   const { estimateSamples, defenderLossFactor } = CONFIG.combat;
+  const defender = game.nations[target];
+  const defenderTroops = target === 0 ? 0 : opts.defenderTroops ?? defender.troops;
+  const defenderDensity = defenderTroops / Math.max(1, defender.tiles);
   const landmasses = new Set<number>();
   let samples = 0;
   let costSum = 0;
   const sample = (t: TileIndex): void => {
     if (samples >= estimateSamples || !isTargetTile(game, t, target)) return;
     samples++;
-    costSum += tileCaptureCost(game, attacker, t);
+    costSum += captureCostAt(game, t, defenderDensity);
     if (target === 0) landmasses.add(game.map.landmass[t]);
   };
   for (const b of game.nations[attacker].border) {
@@ -88,10 +100,17 @@ export function estimateConquest(game: Game, attacker: NationId, target: NationI
   const affordable = Math.floor(troops / cost);
   const tiles = target === 0
     ? unownedLandOn(game, landmasses, affordable)
-    : Math.min(affordable, game.nations[target].tiles);
-  const defender = game.nations[target];
-  const defenderLoss = target === 0 ? 0 : Math.min(defender.troops, tiles * density(defender) * defenderLossFactor);
+    : Math.min(affordable, defender.tiles);
+  const defenderLoss = target === 0 ? 0 : Math.min(defenderTroops, tiles * defenderDensity * defenderLossFactor);
   return { tiles, attackerLoss: tiles * cost, defenderLoss };
+}
+
+/** tileCaptureCost with the owner's density supplied by the caller (ignored on unowned land). */
+function captureCostAt(game: Game, tile: TileIndex, ownerDensity: number): number {
+  const { terrainCost, neutralCost, baseCost, densityFactor } = CONFIG.combat;
+  const t = terrainCost[game.map.terrain[tile]];
+  if (game.owner[tile] === 0) return t * neutralCost;
+  return t * (baseCost + ownerDensity * densityFactor) * defenseMultiplier(game, tile);
 }
 
 /**

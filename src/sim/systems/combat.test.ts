@@ -129,6 +129,18 @@ describe('estimateConquest', () => {
     expect(est.defenderLoss).toBeCloseTo(3 * 100 * defenderLossFactor, 10);
   });
 
+  it('prices the target as holding the overriding troop count when one is given', () => {
+    const g = makeTestGame({ map: ['####', '#M##'], owners: ['abbb', 'abbb'], nations: [{}, { troops: 600 }] });
+    const real = estimateConquest(g, 1, 2, 1000);
+    expect(estimateConquest(g, 1, 2, 1000, {})).toEqual(real);
+    expect(estimateConquest(g, 1, 2, 1000, { defenderTroops: 600 })).toEqual(real);
+
+    const thinned = estimateConquest(g, 1, 2, 1000, { defenderTroops: 120 });
+    expect(thinned.tiles).toBeGreaterThan(real.tiles);
+    g.nations[2].troops = 120;
+    expect(thinned).toEqual(estimateConquest(g, 1, 2, 1000));
+  });
+
   it('caps the tiles at the target nation size', () => {
     const g = makeTestGame({ map: ['####'], owners: ['aabb'], nations: [{}, { troops: 10 }] });
     const est = estimateConquest(g, 1, 2, 1e9);
