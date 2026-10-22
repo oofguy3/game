@@ -13,6 +13,8 @@ import { BuildingStore, onTileCaptured, stepBuildings } from '../systems/buildin
 import { stepEconomy } from '../systems/economy';
 import { Relations } from '../systems/relations';
 import { endSpawnPhase } from '../systems/spawn';
+import { stepUnits } from '../systems/units';
+import type { Unit } from '../systems/units';
 import { checkVictory } from '../systems/victory';
 import { Rng } from '../util/rng';
 import { applyCommand } from './commands';
@@ -70,6 +72,8 @@ export class Game {
   readonly buildings = new BuildingStore();
   /** Pending diplomacy requests by id. */
   readonly requests = new Map<number, DiplomacyRequest>();
+  /** Boats, ships and planes by id, in the order they were created. */
+  readonly units = new Map<number, Unit>();
   /** Called after each ownership change, once the game state is already updated. */
   onOwnerChange: ((tile: TileIndex, from: NationId, to: NationId) => void)[] = [];
 
@@ -143,7 +147,7 @@ export class Game {
     stepBuildings(this);
     stepEconomy(this);
     stepAttacks(this);
-    // Task 18: stepUnits
+    stepUnits(this);
     // Task 24: stepDiplomacy
     if (this.checkVictory) {
       const result = checkVictory(this);

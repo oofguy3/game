@@ -103,7 +103,8 @@ describe('attack command', () => {
       [attack(1, 6, 0.5), 'not adjacent'],
       [attack(1, 4, 0.5), 'not adjacent'],
       [attack(1, 2, 0.5), 'not adjacent'],
-      [attack(1, 6, 0.5, true), 'not adjacent'],
+      // allowed a boat, but a has no coast to sail from
+      [attack(1, 6, 0.5, true), 'no sea route'],
       [attack(1, 1, Number.NaN), 'not enough troops'],
     ];
     for (const [cmd, reason] of cases) {

@@ -1,6 +1,8 @@
+import { CONFIG } from '../../shared/config';
 import type { Command, NationId, Phase } from '../../shared/types';
 import { attackCommand } from '../systems/attacks';
 import { build } from '../systems/buildings';
+import { launchBoat } from '../systems/naval';
 import { spawnNation } from '../systems/spawn';
 import type { Game } from './game';
 
@@ -53,7 +55,11 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
       const result = build(game, cmd);
       return result.ok ? result : reject(game, nation, result.reason);
     }
-    case 'boat':
+    case 'boat': {
+      const ratio = Math.min(1, Math.max(CONFIG.combat.minAttackRatio, cmd.ratio));
+      const result = launchBoat(game, nation, cmd.tile, Math.floor(game.nations[nation].troops * ratio));
+      return result.ok ? result : reject(game, nation, result.reason);
+    }
     case 'buildUnit':
     case 'moveUnit':
     case 'bomb':

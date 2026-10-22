@@ -86,7 +86,7 @@ export function buildUpdate(match: Match): GameUpdate {
       stats: { ...n.stats },
     })),
     buildings,
-    units: [],
+    units: [...game.units.values()].map((u) => ({ id: u.id, type: u.type, owner: u.owner, x: u.x, y: u.y, troops: u.troops })),
     events: game.drainEvents(),
     requests: player === 0 ? [] : [...game.requests.values()].filter((r) => r.to === player),
     result: game.result,

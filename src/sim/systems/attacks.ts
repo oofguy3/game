@@ -5,6 +5,7 @@ import type { Game } from '../core/game';
 import { forEachNeighbor, isLand } from '../map/grid';
 import { MaxHeap } from '../util/heap';
 import { defenderLossPerTile, isTargetTile, tileCaptureCost } from './combat';
+import { launchBoat } from './naval';
 import { declareWar } from './relations';
 
 export interface Attack {
@@ -80,8 +81,53 @@ export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack'
   if (!isLand(map, tile)) return fail('not land');
   const ratio = Math.min(1, Math.max(CONFIG.combat.minAttackRatio, cmd.ratio));
   const troops = Math.floor(game.nations[cmd.nation].troops * ratio);
-  // Task 18: a target that isn't adjacent goes to launchBoat when cmd.allowBoat is set; until then it is rejected.
-  return startAttack(game, cmd.nation, game.owner[tile], troops);
+  const target = game.owner[tile];
+  if (cmd.allowBoat && target !== cmd.nation && !reachableOverLand(game, cmd.nation, tile)) {
+    return launchBoat(game, cmd.nation, nearestBeach(game, cmd.nation, tile) ?? tile, troops);
+  }
+  return startAttack(game, cmd.nation, target, troops);
+}
+
+/** Tiles searched for a beach near an inland click. */
+const BEACH_SEARCH = 4000;
+
+/**
+ * Where a boat aimed at `tile` should land: the coastal tile nearest it (breadth-first over its landmass) that isn't
+ * `nation`'s own or an ally's; `tile` itself when it qualifies; null if none is within reach.
+ */
+function nearestBeach(game: Game, nation: NationId, tile: TileIndex): TileIndex | null {
+  const { map } = game;
+  const landable = (t: TileIndex): boolean => {
+    const o = game.owner[t];
+    return map.coastal[t] === 1 && o !== nation && (o === 0 || game.relations.get(nation, o) !== 'allied');
+  };
+  const queue: TileIndex[] = [tile];
+  const seen = new Set<TileIndex>(queue);
+  for (let i = 0; i < queue.length && queue.length < BEACH_SEARCH; i++) {
+    const t = queue[i];
+    if (landable(t)) return t;
+    forEachNeighbor(map, t, (n) => {
+      if (!seen.has(n) && isLand(map, n)) {
+        seen.add(n);
+        queue.push(n);
+      }
+    });
+  }
+  return null;
+}
+
+/**
+ * Whether an attack over land can reach `tile`: for a nation, when we share a border with it; for free land, when we
+ * hold land on its landmass that touches free land.
+ */
+function reachableOverLand(game: Game, nation: NationId, tile: TileIndex): boolean {
+  const target = game.owner[tile];
+  if (target !== 0) return sharesBorder(game, nation, target);
+  const { landmass } = game.map;
+  for (const b of game.nations[nation].border) {
+    if (landmass[b] === landmass[tile] && touchesTarget(game, b, 0)) return true;
+  }
+  return false;
 }
 
 /**
@@ -92,6 +138,10 @@ export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack'
 export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops: number): void {
   const lander = game.nations[nation];
   if (!lander.alive) return;
+  if (!isLand(game.map, tile)) {
+    lander.troops += troops;
+    return;
+  }
   const owner = game.owner[tile];
   if (owner === nation || (owner !== 0 && game.relations.get(nation, owner) === 'allied')) {
     lander.troops += troops;
@@ -166,6 +216,7 @@ function captureTile(game: Game, attacker: NationId, tile: TileIndex): void {
   if (from !== 0 && game.nations[from].tiles === 0) {
     game.nations[from].alive = false;
     removeAttacks(game, (a) => a.attacker === from);
+    for (const [id, u] of game.units) if (u.owner === from) game.units.delete(id);
     game.emit({ type: 'eliminated', nation: from, by: attacker });
   }
 }
