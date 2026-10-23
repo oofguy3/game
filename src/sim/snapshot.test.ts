@@ -84,6 +84,16 @@ describe('buildUpdate', () => {
     expect(nations[1].maxTroops).toBeGreaterThan(0);
   });
 
+  it('lists each nation’s living allies, in id order', () => {
+    const m = new Match(setup(plains(6, 4), { bots: [{ difficulty: 'easy' }, { difficulty: 'easy' }, { difficulty: 'easy' }] }));
+    const { game } = m;
+    game.relations.set(2, 3, 'allied');
+    game.relations.set(2, 4, 'allied');
+    game.nations[4].alive = false;
+    const allies = Object.fromEntries(buildUpdate(m).nations.map((n) => [n.id, n.allies]));
+    expect(allies).toEqual({ 1: [], 2: [3], 3: [2], 4: [] });
+  });
+
   it('labels sit on an owned tile for C-shaped territory', () => {
     // a C whose centroid falls in the empty middle
     const rows = plains(9, 9);

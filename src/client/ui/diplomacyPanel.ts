@@ -34,11 +34,16 @@ export function dealFromForm(values: Record<keyof Deal, string>, gift = false): 
   };
 }
 
-/** Living nations, besides the player and `ally`, the player could ask `ally` to attack, in id order. */
+/**
+ * Living nations, besides the player and `ally`, the player could ask `ally` to attack — allied neither with the player
+ * nor with `ally` — in id order.
+ */
 export function jointTargets(state: ClientState, ally: NationId): NationId[] {
+  const theirs = state.nations.get(ally)?.allies ?? [];
   const out: NationId[] = [];
   for (const n of state.nations.values()) {
     if (n.id === state.init.playerId || n.id === ally || !n.alive || n.relationToPlayer === 'allied') continue;
+    if (theirs.includes(n.id)) continue;
     out.push(n.id);
   }
   return out.sort((a, b) => a - b);

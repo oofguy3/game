@@ -81,6 +81,7 @@ export function buildUpdate(match: Match): GameUpdate {
       spawned: n.spawned,
       relationToPlayer: relationToPlayer(game, n.id),
       embargoed: player !== 0 && n.id !== player && game.relations.embargoed(player, n.id),
+      allies: n.alive ? alliesOf(game, n.id) : [],
       attackingPlayer: attackingPlayer(game, n.id),
       label: state.labels[n.id] ?? null,
       stats: { ...n.stats },
@@ -100,6 +101,14 @@ function uniqueTiles(tiles: TileIndex[]): TileIndex[] {
     if (seen.has(t)) continue;
     seen.add(t);
     out.push(t);
+  }
+  return out;
+}
+
+function alliesOf(game: Game, id: NationId): NationId[] {
+  const out: NationId[] = [];
+  for (const m of game.nations) {
+    if (m.id !== 0 && m.id !== id && m.alive && game.relations.get(id, m.id) === 'allied') out.push(m.id);
   }
   return out;
 }

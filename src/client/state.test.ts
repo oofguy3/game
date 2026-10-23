@@ -17,7 +17,7 @@ const init: InitPayload = {
 
 const snap = (id: number, over: Partial<NationSnap> = {}): NationSnap => ({
   id, troops: 100, maxTroops: 1000, gold: 5, income: 1, tiles: 2, alive: true, spawned: true,
-  relationToPlayer: 'neutral', embargoed: false, attackingPlayer: 0, label: null,
+  relationToPlayer: 'neutral', embargoed: false, allies: [], attackingPlayer: 0, label: null,
   stats: { peakTiles: 2, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 }, ...over,
 });
 

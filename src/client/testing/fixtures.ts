@@ -6,7 +6,7 @@ import { ClientState } from '../state';
 export function nationSnap(id: number, over: Partial<NationSnap> = {}): NationSnap {
   return {
     id, troops: 1000, maxTroops: 5000, gold: 1000, income: 1, tiles: 0, alive: true, spawned: true,
-    relationToPlayer: 'neutral', embargoed: false, attackingPlayer: 0, label: null,
+    relationToPlayer: 'neutral', embargoed: false, allies: [], attackingPlayer: 0, label: null,
     stats: { peakTiles: 0, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 }, ...over,
   };
 }

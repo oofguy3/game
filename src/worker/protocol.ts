@@ -47,6 +47,8 @@ export interface NationSnap {
   relationToPlayer: Relation;
   /** Whether trade between the player and this nation is switched off, by either side. */
   embargoed: boolean;
+  /** Living nations allied with this one, in id order; none once it is eliminated. */
+  allies: NationId[];
   /** Troops in this nation's attacks on the player. */
   attackingPlayer: number;
   /** Where to write the nation's name, in tile coordinates, and how big; null without land. */
