@@ -62,7 +62,8 @@ export class ClientState {
       const before = this.owner[t];
       const after = u.changedOwners[i];
       if (after === me && before !== me) this.gained++;
-      else if (before === me && after !== me) this.lost.push(t);
+      // land going back to nobody (a moved spawn) was given up, not taken
+      else if (before === me && after !== me && after !== 0) this.lost.push(t);
       this.owner[t] = after;
       this.changed.push(t);
     }

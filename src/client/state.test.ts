@@ -42,6 +42,16 @@ describe('ClientState', () => {
     expect(s.lost).toEqual([]);
   });
 
+  it('does not count land the player gives up by moving their spawn as lost', () => {
+    const s = new ClientState();
+    s.applyInit(init);
+    s.applyUpdate(update({ phase: 'spawn', changedTiles: new Uint32Array([0, 1]), changedOwners: new Uint16Array([1, 1]) }));
+    // the old spot goes back to nobody, the new one becomes the player's
+    s.applyUpdate(update({ phase: 'spawn', changedTiles: new Uint32Array([0, 1, 6, 7]), changedOwners: new Uint16Array([0, 0, 1, 1]) }));
+    expect(s.lost).toEqual([]);
+    expect(s.gained).toBe(2);
+  });
+
   it('keeps the fronts of the latest update', () => {
     const s = new ClientState();
     s.applyInit(init);
