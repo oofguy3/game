@@ -6,6 +6,7 @@ import { build } from '../systems/buildings';
 import { breakAlliance, createRequest, proposeDeal, requestJointAttack, respond, setEmbargo } from '../systems/diplomacy';
 import { buildWarship, launchBoat, moveWarship } from '../systems/naval';
 import { spawnNation } from '../systems/spawn';
+import { askAid, sendAid } from '../systems/teamAid';
 import type { Game } from './game';
 
 export type CommandResult = { ok: true } | { ok: false; reason: string };
@@ -82,13 +83,17 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
     case 'breakAlliance':
       return settle(game, nation, breakAlliance(game, nation, cmd.with));
     case 'respond':
-      return settle(game, nation, respond(game, nation, cmd.requestId, cmd.accept));
+      return settle(game, nation, respond(game, nation, cmd.requestId, cmd.accept, cmd.reason));
     case 'embargo':
       return settle(game, nation, setEmbargo(game, nation, cmd.with, cmd.on));
     case 'proposeDeal':
       return settle(game, nation, proposeDeal(game, nation, cmd.to, cmd.deal));
     case 'requestJointAttack':
       return settle(game, nation, requestJointAttack(game, nation, cmd.to, cmd.target));
+    case 'sendAid':
+      return settle(game, nation, sendAid(game, nation, cmd.to, cmd.gold, cmd.troops));
+    case 'askAid':
+      return settle(game, nation, askAid(game, nation, cmd.to, cmd.resource));
   }
 }
 

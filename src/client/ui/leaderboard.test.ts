@@ -4,7 +4,8 @@ import { leaderboardRows } from './leaderboard';
 
 const snap = (id: number, tiles: number, alive = true): NationSnap => ({
   id, troops: 0, maxTroops: 1, gold: 0, income: 0, tiles, alive, spawned: true, relationToPlayer: 'neutral',
-  embargoed: false, allies: [], attackingPlayer: 0, label: null, stats: { peakTiles: 0, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 },
+  embargoed: false, allies: [], attackingPlayer: 0, askReadyIn: 0, label: null,
+  stats: { peakTiles: 0, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 },
 });
 
 describe('leaderboardRows', () => {

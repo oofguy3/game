@@ -92,6 +92,8 @@ export class Game {
   readonly buildings = new BuildingStore();
   /** Pending diplomacy requests by id. */
   readonly requests = new Map<number, DiplomacyRequest>();
+  /** The tick of each nation's last ask of a teammate (for aid or a joint attack), keyed `from × nations.length + to`. */
+  readonly asks = new Map<number, number>();
   /** Boats, ships and planes by id, in the order they were created. */
   readonly units = new Map<number, Unit>();
   /** Called after each ownership change, once the game state is already updated. */

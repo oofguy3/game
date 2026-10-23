@@ -64,6 +64,8 @@ export interface NationSnap {
   allies: NationId[];
   /** Troops in this nation's attacks on the player. */
   attackingPlayer: number;
+  /** Ticks until the player may ask this teammate again (for help or to attack): 0 when they may, and for others. */
+  askReadyIn: number;
   /** Where to write the nation's name, in tile coordinates, and how big; null without land. */
   label: { x: number; y: number; size: number } | null;
   stats: Nation['stats'];

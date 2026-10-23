@@ -1,15 +1,16 @@
 import { CONFIG } from '../../shared/config';
-import type { Deal, DiplomacyRequest, NationId } from '../../shared/types';
+import type { AidRefusal, Deal, DiplomacyRequest, NationId } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
 import { sameTeam } from '../core/teams';
 import { cancelAttacksBetween } from './attacks';
+import { pacedAsk } from './teamAid';
 import { removeUnit } from './units';
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 
 /** Why `from` can't address `to`, or null if it can: not itself, a real nation, still alive. */
-function counterpartProblem(game: Game, from: NationId, to: NationId): string | null {
+export function counterpartProblem(game: Game, from: NationId, to: NationId): string | null {
   if (to === from) return 'yourself';
   if (!Number.isInteger(to) || to < 1 || to >= game.nations.length) return 'unknown nation';
   if (!game.nations[to].alive) return 'eliminated';
@@ -29,7 +30,8 @@ function onOtherTeams(game: Game, a: NationId, b: NationId): boolean {
  * of the same kind from `from` to `to` still open, an alliance with an ally, and peace without a war.
  */
 export function createRequest(
-  game: Game, kind: DiplomacyRequest['kind'], from: NationId, to: NationId, extra: { deal?: Deal; target?: NationId } = {},
+  game: Game, kind: DiplomacyRequest['kind'], from: NationId, to: NationId,
+  extra: Pick<DiplomacyRequest, 'deal' | 'target' | 'resource'> = {},
 ): CommandResult {
   const problem = counterpartProblem(game, from, to);
   if (problem) return fail(problem);
@@ -50,10 +52,11 @@ export function createRequest(
 /**
  * `nation` answers request `requestId`, which must be addressed to it. An accepted alliance makes the pair allies,
  * ends every attack between them and calls back the boats and planes on their way; accepted peace ends their war the
- * same way (if they are still at war); an accepted
- * deal changes hands if both sides can still pay, else it resolves as not accepted. The request is resolved either way.
+ * same way (if they are still at war); an accepted deal changes hands if both sides can still pay, else it resolves
+ * as not accepted; an accepted joint attack or ask for help changes nothing by itself. The request is resolved either
+ * way, passing on `reason` (why an ask for help was declined).
  */
-export function respond(game: Game, nation: NationId, requestId: number, accept: boolean): CommandResult {
+export function respond(game: Game, nation: NationId, requestId: number, accept: boolean, reason?: AidRefusal): CommandResult {
   const request = game.requests.get(requestId);
   if (!request) return fail('no such request');
   if (request.to !== nation) return fail('not addressed to you');
@@ -65,7 +68,7 @@ export function respond(game: Game, nation: NationId, requestId: number, accept:
     else if (request.kind === 'peace' && game.relations.get(from, to) === 'war') makeRelation(game, from, to, 'neutral');
     else if (request.kind === 'deal' && request.deal) accepted = settleDeal(game, from, to, request.deal);
   }
-  resolve(game, request, accepted);
+  resolve(game, request, accepted, reason);
   return { ok: true };
 }
 
@@ -87,7 +90,7 @@ export function proposeDeal(game: Game, from: NationId, to: NationId, deal: Deal
 }
 
 /** What `nation` lacks to pay `gold` and `troops`, or null if it can. */
-function shortfall(game: Game, nation: NationId, gold: number, troops: number): string | null {
+export function shortfall(game: Game, nation: NationId, gold: number, troops: number): string | null {
   const n = game.nations[nation];
   if (n.gold < gold) return 'not enough gold';
   if (n.troops < troops) return 'not enough troops';
@@ -109,7 +112,7 @@ function settleDeal(game: Game, from: NationId, to: NationId, deal: Deal): boole
 
 /**
  * Asks ally `to` to join an attack on `target`, a living nation allied to neither. Accepting is a promise: it changes
- * nothing by itself (bots act on it).
+ * nothing by itself (bots act on it). Between teammates the asks are paced by `pacedAsk`.
  */
 export function requestJointAttack(game: Game, from: NationId, to: NationId, target: NationId): CommandResult {
   const problem = counterpartProblem(game, from, to);
@@ -122,7 +125,7 @@ export function requestJointAttack(game: Game, from: NationId, to: NationId, tar
   if (game.relations.get(from, target) === 'allied' || game.relations.get(to, target) === 'allied') {
     return fail('target is an ally');
   }
-  return createRequest(game, 'jointAttack', from, to, { target });
+  return pacedAsk(game, from, to, () => createRequest(game, 'jointAttack', from, to, { target }));
 }
 
 /** Sets the pair's relation, ends the attacks between them, calls off what is in flight and emits `relation` if it changed. */
@@ -156,9 +159,9 @@ function recallUnits(game: Game, a: NationId, b: NationId): void {
   }
 }
 
-function resolve(game: Game, request: DiplomacyRequest, accepted: boolean): void {
+function resolve(game: Game, request: DiplomacyRequest, accepted: boolean, reason?: AidRefusal): void {
   const { id: requestId, kind, from, to } = request;
-  game.emit({ type: 'requestResolved', requestId, kind, from, to, accepted });
+  game.emit({ type: 'requestResolved', requestId, kind, from, to, accepted, ...(reason === undefined ? {} : { reason }) });
 }
 
 /**

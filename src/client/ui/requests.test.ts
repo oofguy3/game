@@ -11,6 +11,7 @@ describe('request popups', () => {
     expect(describeRequest(req({}), names)).toBe('Varlonia offers an alliance');
     expect(describeRequest(req({ kind: 'peace' }), names)).toBe('Varlonia asks for peace');
     expect(describeRequest(req({ kind: 'jointAttack', target: 3 }), names)).toBe('Varlonia asks you to attack Kestria');
+    expect(describeRequest(req({ kind: 'aid', resource: 'troops' }), names)).toBe('Varlonia asks you for troops');
     expect(describeRequest(req({ kind: 'deal', deal: { giveGold: 1500, giveTroops: 200, getGold: 0, getTroops: 300 } }), names))
       .toBe('Varlonia offers 1.5k gold and 200 troops for 300 troops');
     expect(describeRequest(req({ kind: 'deal', deal: { giveGold: 500, giveTroops: 0, getGold: 0, getTroops: 0 } }), names))

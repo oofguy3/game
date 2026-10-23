@@ -16,6 +16,8 @@ export function describeRequest(req: DiplomacyRequest, names: Map<NationId, stri
       return `${who} asks for peace`;
     case 'jointAttack':
       return `${who} asks you to attack ${names.get(req.target ?? 0) ?? 'someone'}`;
+    case 'aid':
+      return `${who} asks you for ${req.resource ?? 'help'}`;
     case 'deal': {
       const d = req.deal ?? { giveGold: 0, giveTroops: 0, getGold: 0, getTroops: 0 };
       const offered = amounts(d.giveGold, d.giveTroops) || 'nothing';

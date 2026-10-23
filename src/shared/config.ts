@@ -43,6 +43,15 @@ export const CONFIG = {
     fighter: { cost: 3000, buildTicks: 60, speed: 3, hp: 4, range: 30, detect: 25, hitChance: 0.3 },
   },
   diplomacy: { requestTtlTicks: 300, defaultTrust: 0.5, betrayalTrustPenalty: 0.5, trustRecoveryPerTick: 0.0005 },
+  // teamwork: ticks before a nation may ask the same teammate again; the least ticks between a bot's own help checks;
+  // gang-up and aid chances (× team spirit); aid goes to a teammate under attack below aidLowTroops of its troop limit;
+  // aid and asked troops are up to aidTroopShare of the troops above the reserve, asked gold up to aidGoldShare of the
+  // gold above the next building's cost; help attacks get up to helpBudgetShare of the attack budget; a bot is busy
+  // when incoming troops pass busyIncomingShare of its own; team spirit is offset by up to ±spiritJitter per bot; a
+  // teammate's joint attack eases the target's score requirement by jointEase × team spirit
+  teams: { askCooldownTicks: 300, helpCheckTicks: 100, joinChance: 0.8, aidChance: 0.6, aidLowTroops: 0.25,
+           aidTroopShare: 0.2, aidGoldShare: 0.3, helpBudgetShare: 0.5, busyIncomingShare: 0.3, spiritJitter: 0.1,
+           jointEase: 0.5 },
   ai: { buildingTileValue: 40, neutralBias: 1.5, minAttackScore: 0.01, secondFrontPenalty: 0.4, gangUpShare: 0.35,
         counterRiskWeight: 1, minParaTroops: 2000, proposalCooldownTicks: 300, saveHorizonTicks: 300,
         // shared-border tiles per neighbour whose defense multiplier perception averages

@@ -116,6 +116,8 @@ export class ClientState {
         return e.request.to === me || e.request.from === me;
       case 'requestResolved':
         return e.to === me || e.from === me;
+      case 'aidSent':
+        return e.from === me || e.to === me;
       case 'relation':
         return e.a === me || e.b === me;
     }

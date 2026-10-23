@@ -19,7 +19,8 @@ import type { NeighborInfo, Perception } from './perception';
  * - a deal, when what we get is worth more than what we give (gold at 1, troops at `troopGoldValue`, ×`warTroopValue`
  *   at war) and we can pay;
  * - a joint attack on a neighbour we aren't allied with that scores `jointAttackShare` of our best target; accepting
- *   it focuses our attacks on that target.
+ *   it focuses our attacks on that target;
+ * - an ask for help, never.
  */
 export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: DiplomacyRequest): boolean {
   const ai = CONFIG.ai;
@@ -51,6 +52,8 @@ export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: Diplom
       bot.memory.focusTarget = target;
       return true;
     }
+    case 'aid':
+      return false;
   }
 }
 

@@ -6,6 +6,7 @@ import { inBounds, tileOf } from './map/grid';
 import { WORLD_PROJECTION } from './map/worldMap';
 import type { Match } from './match';
 import { goldIncome, maxTroops } from './systems/economy';
+import { askReadyIn } from './systems/teamAid';
 
 /** How far from a nation's centroid (in tiles) its label may move to sit on its own land. */
 const LABEL_SEARCH = 30;
@@ -104,6 +105,7 @@ export function buildUpdate(match: Match): GameUpdate {
       embargoed: player !== 0 && n.id !== player && game.relations.embargoed(player, n.id),
       allies: n.alive ? alliesOf(game, n.id) : [],
       attackingPlayer: attackingPlayer(game, n.id),
+      askReadyIn: askReadyIn(game, player, n.id),
       label: state.labels[n.id] ?? null,
       stats: { ...n.stats },
     })),

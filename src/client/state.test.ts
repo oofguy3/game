@@ -20,7 +20,7 @@ const init: InitPayload = {
 
 const snap = (id: number, over: Partial<NationSnap> = {}): NationSnap => ({
   id, troops: 100, maxTroops: 1000, gold: 5, income: 1, tiles: 2, alive: true, spawned: true,
-  relationToPlayer: 'neutral', embargoed: false, allies: [], attackingPlayer: 0, label: null,
+  relationToPlayer: 'neutral', embargoed: false, allies: [], attackingPlayer: 0, askReadyIn: 0, label: null,
   stats: { peakTiles: 2, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 }, ...over,
 });
 
@@ -104,8 +104,11 @@ describe('ClientState', () => {
     const mine: GameEvent = { type: 'attackStarted', attacker: 2, target: 1, troops: 50 };
     const others: GameEvent = { type: 'attackStarted', attacker: 2, target: 3, troops: 50 };
     const everyone: GameEvent = { type: 'eliminated', nation: 3, by: 2 };
-    s.applyUpdate(update({ events: [mine, others, everyone] }));
-    expect(s.feed).toEqual([mine, everyone]);
+    const aidToMe: GameEvent = { type: 'aidSent', from: 2, to: 1, gold: 0, troops: 400 };
+    const aidFromMe: GameEvent = { type: 'aidSent', from: 1, to: 2, gold: 100, troops: 0 };
+    const aidElsewhere: GameEvent = { type: 'aidSent', from: 2, to: 3, gold: 100, troops: 0 };
+    s.applyUpdate(update({ events: [mine, others, everyone, aidToMe, aidFromMe, aidElsewhere] }));
+    expect(s.feed).toEqual([mine, everyone, aidToMe, aidFromMe]);
     s.applyUpdate(update({ events: Array.from({ length: 60 }, () => mine) }));
     expect(s.feed).toHaveLength(50);
   });

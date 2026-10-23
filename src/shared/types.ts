@@ -15,9 +15,13 @@ export type MapSize = 'small' | 'medium' | 'large';
 export type MapChoice = { kind: 'world' } | { kind: 'random'; size: MapSize; seed: number };
 export interface Deal { giveGold: number; giveTroops: number; getGold: number; getTroops: number }
 export interface DiplomacyRequest {
-  id: number; kind: 'alliance' | 'peace' | 'deal' | 'jointAttack'; from: NationId; to: NationId;
+  id: number; kind: 'alliance' | 'peace' | 'deal' | 'jointAttack' | 'aid'; from: NationId; to: NationId;
   expiresAt: number; deal?: Deal; target?: NationId;
+  /** What an aid request asks for. */
+  resource?: 'troops' | 'gold';
 }
+/** Why a teammate says no to an ask for help: at war and losing ground, nothing to spare, or it doesn't want to now. */
+export type AidRefusal = 'busy' | 'cantSpare' | 'notNow';
 export type Command =
   | { type: 'spawn'; nation: NationId; tile: TileIndex }
   | { type: 'attack'; nation: NationId; tile: TileIndex; ratio: number; allowBoat?: boolean }
@@ -32,8 +36,10 @@ export type Command =
   | { type: 'proposePeace'; nation: NationId; to: NationId }
   | { type: 'proposeDeal'; nation: NationId; to: NationId; deal: Deal }
   | { type: 'requestJointAttack'; nation: NationId; to: NationId; target: NationId }
-  | { type: 'respond'; nation: NationId; requestId: number; accept: boolean }
+  | { type: 'respond'; nation: NationId; requestId: number; accept: boolean; reason?: AidRefusal }
   | { type: 'embargo'; nation: NationId; with: NationId; on: boolean }
+  | { type: 'sendAid'; nation: NationId; to: NationId; gold: number; troops: number }
+  | { type: 'askAid'; nation: NationId; to: NationId; resource: 'troops' | 'gold' }
   | { type: 'debugGrant'; nation: NationId; gold?: number; troops?: number }; // only when GameSetup.debug
 export interface GameResult {
   winners: NationId[];
@@ -56,7 +62,11 @@ export type GameEvent =
   | { type: 'trade'; nation: NationId; partner: NationId; gold: number }
   | { type: 'radarWarning'; nation: NationId; from: NationId; unit: UnitType; tile: TileIndex }
   | { type: 'request'; request: DiplomacyRequest }
-  | { type: 'requestResolved'; requestId: number; kind: DiplomacyRequest['kind']; from: NationId; to: NationId; accepted: boolean }
+  | {
+    type: 'requestResolved'; requestId: number; kind: DiplomacyRequest['kind']; from: NationId; to: NationId;
+    accepted: boolean; reason?: AidRefusal;
+  }
+  | { type: 'aidSent'; from: NationId; to: NationId; gold: number; troops: number }
   | { type: 'relation'; a: NationId; b: NationId; relation: Relation }
   | { type: 'betrayal'; betrayer: NationId; victim: NationId }
   | { type: 'gameOver'; result: GameResult };
