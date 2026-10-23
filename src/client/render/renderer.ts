@@ -17,6 +17,8 @@ const MIN_LABEL_PX = 8;
 const MAX_LABEL_PX = 64;
 /** How many recent frame times `frameMs` keeps. */
 const FRAME_HISTORY = 240;
+/** How long the map takes to fade to grey (or back). */
+const GREY_MS = 1200;
 
 /**
  * Draws the game every frame. The map comes from the graphics chip (`gl`, on its own canvas underneath) while it
@@ -30,7 +32,11 @@ export class Renderer {
   private names = new Map<NationId, string>();
   private readonly ctx: CanvasRenderingContext2D;
   private readonly frames: number[] = [];
-  private grey = 0;
+  private greyFrom = 0;
+  private greyTo = 0;
+  private greyStart = 0;
+  /** How grey the map is right now, 0 (full colour) to 1. */
+  grey = 0;
   /** The territory for the graphics chip; only kept while there is one. */
   private field: TerritoryField | null = null;
   /** The fronts last sent to the graphics chip, as a key. */
@@ -59,6 +65,13 @@ export class Renderer {
     return this.frames;
   }
 
+  /** Fades the map to grey (on defeat) or back to colour over GREY_MS. */
+  setGrey(on: boolean): void {
+    this.greyFrom = this.grey;
+    this.greyTo = on ? 1 : 0;
+    this.greyStart = performance.now();
+  }
+
   /** Throws the graphics context away, as a lost graphics chip would (for tests). */
   debugLoseContext(): void {
     this.gl?.dispose();
@@ -85,6 +98,10 @@ export class Renderer {
     if (!state.init) return;
     const start = performance.now();
     this.syncTerritory();
+    const fade = Math.min(1, (start - this.greyStart) / GREY_MS);
+    this.grey = this.greyFrom + (this.greyTo - this.greyFrom) * fade;
+    // the flat look greys through CSS instead of the shader
+    this.canvas.classList.toggle('grey', this.greyTo === 1 && this.look === 'flat');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.look === 'gl') {
       ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);

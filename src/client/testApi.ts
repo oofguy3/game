@@ -1,5 +1,5 @@
 import { CONFIG } from '../shared/config';
-import type { Command, NationId, TileIndex } from '../shared/types';
+import type { Command, GameResult, NationId, TileIndex } from '../shared/types';
 import type { Camera } from './camera';
 import type { MapInfo } from './mapInfo';
 import type { Renderer } from './render/renderer';
@@ -32,6 +32,10 @@ export interface TestApi {
   findInlandTile(): number | null;
   /** Throws the map's graphics context away, as a lost graphics chip would. */
   loseContext(): void;
+  /** Ends the match on the page as if the simulation had (only for testing the end screens). */
+  forceResult(result: GameResult): void;
+  /** How grey the map is, 0 to 1. */
+  grey(): number;
 }
 
 declare global {
@@ -50,7 +54,7 @@ const DISTANCE_SAMPLES = 600;
 /** Exposes hooks for the browser tests on `window.__test` (only with ?test=1). */
 export function installTestApi(
   state: ClientState, info: MapInfo, camera: Camera, canvas: HTMLCanvasElement, send: (cmd: Command) => void,
-  renderer: Renderer,
+  renderer: Renderer, refresh: () => void,
 ): void {
   const toPage = (tile: number): { x: number; y: number } => {
     const w = state.init.width;
@@ -86,6 +90,11 @@ export function installTestApi(
     findWaterTile: () => farthestTile(info, 'water'),
     findInlandTile: () => farthestTile(info, 'land'),
     loseContext: () => renderer.debugLoseContext(),
+    forceResult(result) {
+      state.result = result;
+      refresh();
+    },
+    grey: () => renderer.grey,
   };
 }
 

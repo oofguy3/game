@@ -132,7 +132,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   const hud = new Hud(state, (type) => selectBuild(type), colors.get(init.playerId) ?? 0x3b82f6);
   const leaderboard = new Leaderboard(state);
   const feed = new EventFeed(state, names);
-  const end = new EndScreen(state, Math.max(1, land), backToMenu);
+  const end = new EndScreen(state, Math.max(1, land), backToMenu, (on) => renderer.setGrey(on), colors.get(init.playerId) ?? 0x3b82f6);
   const banner = h('div', { class: 'banner' });
   const diplomacy = new DiplomacyPanel(state, names, colors, send);
   const requests = new RequestPopups(state, names, send);
@@ -172,7 +172,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
       return open;
     },
   });
-  if (testMode) installTestApi(state, info, camera, canvas, send, renderer);
+  if (testMode) installTestApi(state, info, camera, canvas, send, renderer, () => update());
 
   let last = performance.now();
   const loop = (now: number): void => {

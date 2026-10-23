@@ -204,6 +204,34 @@ canvas.backdrop { position: absolute; inset: 0; display: block; }
 button.play { margin-top: 6px; padding: 10px; font-size: 16px; }
 .end-card h1.victory { color: var(--good); }
 .end-card h1.defeat { color: var(--danger); }
+.end-card { position: relative; z-index: 1; }
+.end-card.pop { animation: pop 350ms cubic-bezier(0.2, 0.9, 0.3, 1.25); }
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.9); }
+}
+.end-card.drop { animation: drop 420ms cubic-bezier(0.55, 0, 0.9, 0.5); }
+@keyframes drop {
+  from { opacity: 0; transform: translateY(-40px); }
+}
+.end-card h1.shine {
+  background: linear-gradient(100deg, var(--good) 35%, #ecfccb 48%, var(--good) 61%);
+  background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shine 2.4s ease-in-out infinite;
+}
+@keyframes shine {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+.confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+.confetti i {
+  position: absolute; top: -20px; left: var(--x); width: 8px; height: 14px; border-radius: 2px; background: var(--c);
+  animation: fall var(--dur) cubic-bezier(0.3, 0.5, 0.6, 1) var(--delay) forwards;
+}
+@keyframes fall {
+  to { transform: translate(var(--drift), 110vh) rotate(var(--spin)); opacity: 0.2; }
+}
+canvas.map { transition: filter 1.2s ease; }
+canvas.map.grey { filter: grayscale(1); }
 .end-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .end-stat { background: rgba(30, 41, 59, 0.9); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; }
 .end-stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
