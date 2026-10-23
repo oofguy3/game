@@ -175,7 +175,7 @@ describe('Bot', () => {
     expect(bot.weights).toBe(PERSONALITY.opportunist);
     expect(bot.memory).toEqual({
       lastBuildTick: -1e9, pendingAttack: null, lastProposalTick: -1e9, betrayTarget: null, focusTarget: null,
-      lastNavalThreatTick: -1e9, overseasTargets: false,
+      lastNavalThreatTick: -1e9, overseasTargets: false, lastHelpCheck: -1e9,
     });
   });
 

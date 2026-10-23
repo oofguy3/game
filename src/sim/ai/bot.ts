@@ -11,6 +11,7 @@ import { chooseInvasion, manageWarships } from './naval';
 import { perceive } from './perception';
 import { DIFFICULTY, PERSONALITY } from './profile';
 import type { DifficultyProfile, PersonalityWeights } from './profile';
+import { answerAid, teamHelp } from './teamwork';
 
 /** What a bot remembers between decisions. */
 export interface BotMemory {
@@ -25,6 +26,8 @@ export interface BotMemory {
   lastNavalThreatTick: number;
   /** Whether the last look overseas found something to invade (makes ports worth more). */
   overseasTargets: boolean;
+  /** When this bot last checked whether to help a teammate on its own. */
+  lastHelpCheck: number;
 }
 
 /** A tick long before any game starts, so cooldowns measured from it have always run out. */
@@ -34,6 +37,8 @@ const LONG_AGO = -1e9;
  * stay clear of the Game's naming salt (1) and Match's personality salt (7001).
  */
 const BOT_RNG_SALT = 1000;
+/** Salt of each bot's teamwork stream, offset by the bot's id like `BOT_RNG_SALT`, and clear of the other salts too. */
+const TEAMWORK_RNG_SALT = 3000;
 
 /**
  * The controller of one bot nation. It reads the game like any player could and answers with commands that go through
@@ -45,6 +50,10 @@ export class Bot {
   readonly weights: PersonalityWeights;
   /** This bot's own random stream: forked from `seed` by id, so bots never share draws with each other or the game. */
   readonly rng: Rng;
+  /** The stream of this bot's teamwork rolls, apart from `rng` so that free-for-all bots draw exactly as before. */
+  readonly teamRng: Rng;
+  /** How readily it helps teammates: its personality's, offset by up to ±`spiritJitter` (drawn from `teamRng`). */
+  teamSpirit: number;
   memory: BotMemory = {
     lastBuildTick: LONG_AGO,
     pendingAttack: null,
@@ -53,6 +62,7 @@ export class Bot {
     focusTarget: null,
     lastNavalThreatTick: LONG_AGO,
     overseasTargets: false,
+    lastHelpCheck: LONG_AGO,
   };
 
   private readonly game: Game;
@@ -64,6 +74,8 @@ export class Bot {
     this.profile = DIFFICULTY[difficulty];
     this.weights = PERSONALITY[personality];
     this.rng = new Rng(seed).fork(BOT_RNG_SALT + id);
+    this.teamRng = new Rng(seed).fork(TEAMWORK_RNG_SALT + id);
+    this.teamSpirit = this.weights.teamSpirit + (this.teamRng.next() * 2 - 1) * CONFIG.teams.spiritJitter;
   }
 
   /** The commands this bot issues now, all on its own behalf. Bots act only while the game is being played. */
@@ -73,28 +85,37 @@ export class Bot {
   }
 
   /**
-   * The decisions themselves, made only while the game is being played: answers to the requests addressed to us; an
-   * attack held back for bombs once they should have fallen; a building; attacks (one on a fortified front may wait for
-   * bombs first, and the held target is left alone meanwhile); an invasion when nothing else is going on; paratroopers
-   * with what the budget has left; the warships and fighters; a betrayal; and new proposals. A held target that
-   * attacks us is answered at once instead. Nothing is aimed at an ally, at a nation whose alliance we accept now or
-   * at one we have offered an alliance (it may accept before our command lands).
+   * The decisions themselves, made only while the game is being played: answers to the requests addressed to us (a
+   * teammate's ask for help by `answerAid`); an attack held back for bombs once they should have fallen; a building;
+   * attacks (one on a fortified front may wait for bombs first, and the held target is left alone meanwhile); help for
+   * a teammate with what the budget has left; an invasion when nothing else is going on; paratroopers with what the
+   * budget has left; the warships and fighters; a betrayal; and new proposals. A held target that attacks us is
+   * answered at once instead. Nothing is aimed at an ally, at a nation whose alliance we accept now or at one we have
+   * offered an alliance (it may accept before our command lands).
    */
   protected decide(): Command[] {
     const game = this.game;
     const me = this.id;
     let p = perceive(game, me);
     const commands: Command[] = [];
-    // each command's gold comes off what the later decisions of this think see
+    // each command's gold, and the troops we give away, come off what the later decisions of this think see
     const issue = (cmd: Command): void => {
       commands.push(cmd);
       const gold = commandGold(game, cmd);
       if (gold > 0) p = { ...p, gold: p.gold - gold };
+      if (cmd.type === 'sendAid' && cmd.troops > 0) {
+        const troops = p.troops - cmd.troops;
+        p = { ...p, troops, troopRatio: troops / p.maxTroops };
+      }
     };
 
     const accepting = new Set<NationId>();
     for (const req of [...game.requests.values()]) {
       if (req.to !== me) continue;
+      if (req.kind === 'aid') {
+        answerAid(game, p, this, req).forEach(issue);
+        continue;
+      }
       const accept = evaluateRequest(game, p, this, req);
       if (accept && req.kind === 'alliance') accepting.add(req.from);
       issue({ type: 'respond', nation: me, requestId: req.id, accept });
@@ -149,6 +170,14 @@ export class Bot {
       spent += attack.ratio * p.troops;
       attacked = true;
     }
+    for (const help of teamHelp(game, p, this, spent)) {
+      if (!allowed(help) || (held !== null && aimedAt(help) === held)) continue;
+      issue(help);
+      if (help.type === 'attack') {
+        spent += help.ratio * p.troops;
+        attacked = true;
+      }
+    }
     if (!attacked && held === null && !bombing) {
       const invasion = chooseInvasion(game, p, this);
       if (invasion && allowed(invasion)) issue(invasion);
@@ -179,6 +208,7 @@ function commandGold(game: Game, cmd: Command): number {
     case 'paradrop': return U.paraPlane.cost;
     case 'buildUnit': return cmd.unit === 'warship' ? U.warship.cost : U.fighter.cost;
     case 'proposeDeal': return cmd.deal.giveGold;
+    case 'sendAid': return cmd.gold;
     default: return 0;
   }
 }

@@ -22,9 +22,11 @@ export interface DiplomacyRequest {
 }
 /** Why a teammate says no to an ask for help: at war and losing ground, nothing to spare, or it doesn't want to now. */
 export type AidRefusal = 'busy' | 'cantSpare' | 'notNow';
+/** The teammate an attack helps: joining the ally's attack on the target, or striking back at the ally's attacker. */
+export interface AttackSupport { ally: NationId; kind: 'join' | 'defend' }
 export type Command =
   | { type: 'spawn'; nation: NationId; tile: TileIndex }
-  | { type: 'attack'; nation: NationId; tile: TileIndex; ratio: number; allowBoat?: boolean }
+  | { type: 'attack'; nation: NationId; tile: TileIndex; ratio: number; allowBoat?: boolean; support?: AttackSupport }
   | { type: 'boat'; nation: NationId; tile: TileIndex; ratio: number }
   | { type: 'build'; nation: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildUnit'; nation: NationId; unit: 'warship' | 'fighter'; buildingId: number }
@@ -51,7 +53,7 @@ export type GameEvent =
   | { type: 'rejected'; nation: NationId; reason: string }
   | { type: 'spawned'; nation: NationId; tile: TileIndex }
   | { type: 'phase'; phase: Phase }
-  | { type: 'attackStarted'; attacker: NationId; target: NationId; troops: number }
+  | { type: 'attackStarted'; attacker: NationId; target: NationId; troops: number; support?: AttackSupport }
   | { type: 'eliminated'; nation: NationId; by: NationId } // by 0: found nowhere to start
   | { type: 'buildingDone'; nation: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildingCaptured'; from: NationId; to: NationId; building: BuildingType; tile: TileIndex }

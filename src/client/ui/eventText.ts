@@ -24,6 +24,11 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
     switch (e.type) {
       case 'attackStarted':
         if (e.target === 0) return null;
+        if (e.support?.ally === me) {
+          return e.support.kind === 'join'
+            ? `${n(e.attacker)} joins your attack on ${n(e.target)}`
+            : `${n(e.attacker)} strikes back at ${n(e.target)} for you`;
+        }
         if (e.attacker === me) return `you attacked ${n(e.target)}`;
         return e.target === me ? `${n(e.attacker)} attacked you` : null;
       case 'buildingDone':

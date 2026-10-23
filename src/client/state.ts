@@ -104,7 +104,7 @@ export class ClientState {
       case 'radarWarning':
         return e.nation === me;
       case 'attackStarted':
-        return e.attacker === me || e.target === me;
+        return e.attacker === me || e.target === me || e.support?.ally === me;
       case 'buildingCaptured':
         return e.from === me || e.to === me;
       case 'buildingDestroyed':

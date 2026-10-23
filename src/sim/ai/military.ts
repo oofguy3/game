@@ -184,7 +184,7 @@ function counterattack(game: Game, p: Perception, bot: Bot): AttackCommand | nul
  * An attack command sending `troops` at `target`, aimed at a target tile touching our border; null if none fits. An
  * attack command sends at least `minAttackRatio` of the pool, so a smaller amount is rounded up to that.
  */
-function attackOn(game: Game, p: Perception, target: NationId, troops: number): AttackCommand | null {
+export function attackOn(game: Game, p: Perception, target: NationId, troops: number): AttackCommand | null {
   const ratio = Math.max(CONFIG.combat.minAttackRatio, troops / Math.max(1, p.troops));
   if (Math.floor(p.troops * ratio) < 1) return null;
   const tile = frontierTile(game, p.me, target);

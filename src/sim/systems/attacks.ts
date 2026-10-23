@@ -1,5 +1,5 @@
 import { CONFIG } from '../../shared/config';
-import type { Command, NationId, TileIndex } from '../../shared/types';
+import type { AttackSupport, Command, NationId, TileIndex } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
 import { forEachNeighbor, isLand } from '../map/grid';
@@ -7,6 +7,7 @@ import { MaxHeap } from '../util/heap';
 import { defenderLossPerTile, isTargetTile, tileCaptureCost } from './combat';
 import { launchBoat } from './naval';
 import { declareWar } from './relations';
+import { teammateProblem } from './teamAid';
 
 export interface Attack {
   id: number;
@@ -39,10 +40,12 @@ export function sharesBorder(game: Game, a: NationId, b: NationId): boolean {
  * losing the smaller amount; what is left joins the attacker's existing attack on the target, or starts a new one.
  * Either way every target tile touching the attacker's border or the seed tile joins the frontier, so land that has
  * come within reach since an attack began is taken too; with `seedOnly` (paratroopers) only the seed tile's. Attacking a nation declares war on it. Reports the reason on
- * failure without emitting `rejected`; `applyCommand` does that.
+ * failure without emitting `rejected`; `applyCommand` does that. `support` (already checked) goes out with
+ * `attackStarted`.
  */
 export function startAttack(
   game: Game, attacker: NationId, target: NationId, troops: number, seedTile?: TileIndex, seedOnly = false,
+  support?: AttackSupport,
 ): CommandResult {
   if (target === attacker) return fail('own tile');
   if (target !== 0 && game.relations.get(attacker, target) === 'allied') return fail('allied');
@@ -51,7 +54,7 @@ export function startAttack(
 
   game.nations[attacker].troops -= troops;
   declareWar(game, attacker, target);
-  game.emit({ type: 'attackStarted', attacker, target, troops });
+  game.emit({ type: 'attackStarted', attacker, target, troops, ...(support && { support }) });
 
   const remaining = troops - cancelCounterattack(game, attacker, target, troops);
   if (remaining <= 0) return { ok: true };
@@ -74,6 +77,8 @@ export function startAttack(
  * The `attack` command: attacks the owner of `cmd.tile` (or spreads into unowned land) with
  * floor(troops × ratio) troops, the ratio clamped to [`minAttackRatio`, 1]. With `allowBoat`, a target out of reach
  * over land is attacked by boat, landing on its nearest beach or free beach ('no beach' when there's none in reach).
+ * The command's `support` goes out with `attackStarted` when its ally is a living teammate; otherwise it is dropped
+ * and the attack goes ahead without it.
  */
 export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack' }>): CommandResult {
   const { map } = game;
@@ -88,7 +93,15 @@ export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack'
     const beach = nearestBeach(game, tile);
     return beach === null ? fail('no beach') : launchBoat(game, cmd.nation, beach, troops);
   }
-  return startAttack(game, cmd.nation, target, troops);
+  const support = checkedSupport(game, cmd.nation, cmd.support);
+  return startAttack(game, cmd.nation, target, troops, undefined, false, support);
+}
+
+/** `support` as `attacker` may claim it — well formed, for a living teammate — or undefined. */
+function checkedSupport(game: Game, attacker: NationId, support: AttackSupport | undefined): AttackSupport | undefined {
+  if (!support || (support.kind !== 'join' && support.kind !== 'defend')) return undefined;
+  const { ally, kind } = support;
+  return teammateProblem(game, attacker, ally) === null ? { ally, kind } : undefined;
 }
 
 /** Tiles searched for a beach near an inland click. */

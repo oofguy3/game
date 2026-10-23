@@ -51,4 +51,18 @@ describe('describeEvent', () => {
     expect(line({ type: 'request', request: { ...request, resource: 'troops' } })).toBe('Nuni asks you for troops');
     expect(line({ type: 'request', request: { ...request, resource: 'gold' } })).toBe('Nuni asks you for gold');
   });
+
+  it('teamwork lines', () => {
+    const world = new Map([[1, 'You'], [4, 'Nirenia'], [5, 'Varlonia'], [6, 'Fenyutra'], [7, 'Zanbaia'], [8, 'Nuni']]);
+    const line = (e: GameEvent): string | null => describeEvent(e, world, 1);
+    const started = (attacker: number, target: number, ally: number, kind: 'join' | 'defend'): GameEvent => ({
+      type: 'attackStarted', attacker, target, troops: 900, support: { ally, kind },
+    });
+    expect(line(started(4, 5, 1, 'join'))).toBe('Nirenia joins your attack on Varlonia');
+    expect(line(started(6, 7, 1, 'defend'))).toBe('Fenyutra strikes back at Zanbaia for you');
+    // support for someone else keeps today's line, or none
+    expect(line(started(4, 5, 8, 'join'))).toBeNull();
+    expect(line(started(6, 7, 8, 'defend'))).toBeNull();
+    expect(line(started(5, 1, 7, 'join'))).toBe('Varlonia attacked you');
+  });
 });

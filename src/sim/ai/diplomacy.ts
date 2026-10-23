@@ -18,9 +18,9 @@ import type { NeighborInfo, Perception } from './perception';
  *   have another war;
  * - a deal, when what we get is worth more than what we give (gold at 1, troops at `troopGoldValue`, ×`warTroopValue`
  *   at war) and we can pay;
- * - a joint attack on a neighbour we aren't allied with that scores `jointAttackShare` of our best target; accepting
- *   it focuses our attacks on that target;
- * - an ask for help, never.
+ * - a joint attack on a neighbour we aren't allied with that scores `jointAttackShare` of our best target (asked by a
+ *   teammate, that share × (1 − `jointEase` × our team spirit)); accepting it focuses our attacks on that target;
+ * - an ask for help, never: `answerAid` answers those instead.
  */
 export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: DiplomacyRequest): boolean {
   const ai = CONFIG.ai;
@@ -48,7 +48,10 @@ export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: Diplom
       const scores = scoreTargets(game, p, bot);
       const best = scores[0]?.score ?? 0;
       const theirs = scores.find((s) => s.target === target)?.score ?? 0;
-      if (best <= 0 || theirs < ai.jointAttackShare * best) return false;
+      const share = sameTeam(game, p.me, req.from)
+        ? ai.jointAttackShare * (1 - CONFIG.teams.jointEase * bot.teamSpirit)
+        : ai.jointAttackShare;
+      if (best <= 0 || theirs < share * best) return false;
       bot.memory.focusTarget = target;
       return true;
     }

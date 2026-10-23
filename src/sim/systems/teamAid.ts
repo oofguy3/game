@@ -7,8 +7,8 @@ import { counterpartProblem, createRequest, shortfall } from './diplomacy';
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 
-/** Why `from` can't send to or ask `to`, or null if it can: `to` must be a real, living nation on `from`'s team. */
-function teammateProblem(game: Game, from: NationId, to: NationId): string | null {
+/** Why `from` can't send to, ask or support `to`, or null if it can: `to` must be a living nation on `from`'s team. */
+export function teammateProblem(game: Game, from: NationId, to: NationId): string | null {
   return counterpartProblem(game, from, to) ?? (sameTeam(game, from, to) ? null : 'not a teammate');
 }
 
