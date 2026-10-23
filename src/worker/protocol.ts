@@ -39,7 +39,10 @@ export interface InitPayload {
   height: number;
   terrain: Uint8Array;
   playerId: NationId;
-  nations: { id: NationId; name: string; color: number; isPlayer: boolean }[];
+  /** How the match is played. */
+  rules: MatchRules;
+  /** `team` is 1–4 in teams mode, 0 in free-for-all. */
+  nations: { id: NationId; name: string; color: number; isPlayer: boolean; team: number }[];
   spawnEndsAt: number;
   look: LookOptions;
 }

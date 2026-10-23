@@ -1,4 +1,4 @@
-import { nationColor, UNOWNED_COLOR } from '../../shared/colors';
+import { nationColor, teamColor, UNOWNED_COLOR } from '../../shared/colors';
 import { CONFIG } from '../../shared/config';
 import { DEFAULT_RULES } from '../../shared/rules';
 import type { MatchRules } from '../../shared/rules';
@@ -24,6 +24,7 @@ import { applyCommand } from './commands';
 import { nationNames } from './names';
 import { createNation } from './nation';
 import type { Nation } from './nation';
+import { assignTeams, lockTeams, TEAM_RNG_SALT } from './teams';
 import { tuningFor } from './tuning';
 import type { Tuning } from './tuning';
 
@@ -31,7 +32,11 @@ export interface GameSetup {
   map: GameMap;
   seed: number;
   player: { name: string } | null;
-  bots: { difficulty: Difficulty; personality?: Personality }[];
+  /**
+   * One per bot. `team` sets the bot's team in teams mode (as the arena does): when any bot has one, every bot needs
+   * one from 1 to the rules' team count, nobody is shuffled and the player, if any, is on team 1.
+   */
+  bots: { difficulty: Difficulty; personality?: Personality; team?: number }[];
   spawnTicks?: number;
   debug?: boolean;
   /** Whether `step` ends the game on a win condition. Defaults to true. */
@@ -129,6 +134,7 @@ export class Game {
       }));
     });
     this.relations = new Relations(this.nations.length);
+    if (this.rules.mode === 'teams') this.formTeams(setup);
     this.spawnSpacing = spawnSpacingFor(setup.map.landCount, this.nations.length - 1);
     this.onOwnerChange.push((tile, from, to) => onTileCaptured(this, tile, from, to));
   }
@@ -249,5 +255,33 @@ export class Game {
       || (x > 0 && owners[t - 1] !== owner)
       || (x < width - 1 && owners[t + 1] !== owner)
       || (t < width * (height - 1) && owners[t + width] !== owner);
+  }
+
+  /**
+   * Puts every nation on a team: the bots' own `team` when any has one (the player on team 1), else dealt by
+   * `assignTeams` from a stream of their own, so the game's stream is untouched. Each nation then takes a shade of its
+   * team's family, numbered within the team in id order, and teammates become allies.
+   */
+  private formTeams(setup: GameSetup): void {
+    const botIds = this.nations.slice(1).filter((n) => !n.isPlayer).map((n) => n.id);
+    let teams = new Map<NationId, number>();
+    if (setup.bots.some((b) => b.team !== undefined)) {
+      if (this.playerId !== 0) teams.set(this.playerId, 1);
+      setup.bots.forEach((bot, i) => {
+        const team = bot.team;
+        if (team === undefined || !Number.isInteger(team) || team < 1 || team > this.rules.teams) {
+          throw new Error(`Bot ${i} has team ${team}; with teams given, each bot needs one of 1–${this.rules.teams}`);
+        }
+        teams.set(botIds[i], team);
+      });
+    } else {
+      teams = assignTeams(this.playerId, botIds, this.rules.teams, this.rng.fork(TEAM_RNG_SALT));
+    }
+    const inTeam = new Array<number>(this.rules.teams + 1).fill(0);
+    for (const n of this.nations.slice(1)) {
+      n.team = teams.get(n.id)!;
+      n.color = teamColor(n.team, inTeam[n.team]++, n.isPlayer);
+    }
+    lockTeams(this);
   }
 }

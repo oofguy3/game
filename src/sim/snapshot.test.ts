@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../shared/config';
+import { DEFAULT_RULES } from '../shared/rules';
+import type { MatchRules } from '../shared/rules';
 import type { DiplomacyRequest } from '../shared/types';
 import type { GameSetup } from './core/game';
 import { tileOf } from './map/grid';
@@ -36,6 +38,23 @@ describe('buildInit', () => {
     expect(init.nations[0].color).toBe(m.game.nations[1].color);
     init.terrain[0] = 0;
     expect(m.game.map.terrain[0]).toBe(1);
+  });
+});
+
+describe('buildInit rules and teams', () => {
+  it("buildInit carries the rules and each nation's team", () => {
+    const rules: MatchRules = { ...DEFAULT_RULES, mode: 'teams', teams: 2, richStart: true };
+    const bots = Array.from({ length: 3 }, () => ({ difficulty: 'easy' as const }));
+    const m = new Match(setup(plains(6, 4), { bots, rules }));
+    const init = buildInit(m, LOOK);
+    expect(init.rules).toEqual(rules);
+    expect(init.nations.map((n) => n.team)).toEqual(m.game.nations.slice(1).map((n) => n.team));
+    expect(init.nations.map((n) => n.team).sort()).toEqual([1, 1, 2, 2]);
+    expect(init.nations[0].team).toBe(1);
+    // free-for-all: the default rules, nobody on a team
+    const ffa = buildInit(new Match(setup(plains(6, 4))), LOOK);
+    expect(ffa.rules).toEqual(DEFAULT_RULES);
+    expect(ffa.nations.map((n) => n.team)).toEqual([0, 0, 0]);
   });
 });
 

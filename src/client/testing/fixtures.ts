@@ -1,3 +1,4 @@
+import { DEFAULT_RULES } from '../../shared/rules';
 import type { NationSnap } from '../../worker/protocol';
 import { MapInfo } from '../mapInfo';
 import { ClientState } from '../state';
@@ -34,7 +35,10 @@ export function makeClientState(map: string[], owners: string[], nations: Partia
   const state = new ClientState();
   state.applyInit({
     width, height, terrain, playerId: 1, spawnEndsAt: 0, look: { latitude: { top: 72, bottom: -72 }, seed: 1, dryBands: false },
-    nations: Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `N${i + 1}`, color: 0x808080, isPlayer: i === 0 })),
+    rules: { ...DEFAULT_RULES },
+    nations: Array.from({ length: count }, (_, i) => ({
+      id: i + 1, name: `N${i + 1}`, color: 0x808080, isPlayer: i === 0, team: 0,
+    })),
   });
   state.owner.set(owner);
   state.phase = 'playing';

@@ -1,6 +1,7 @@
 import { CONFIG } from '../../shared/config';
 import type { Command, Deal, DiplomacyRequest, NationId } from '../../shared/types';
 import type { Game } from '../core/game';
+import { sameTeam } from '../core/teams';
 import { estimateConquest } from '../systems/combat';
 import { goldIncome, troopGrowth } from '../systems/economy';
 import type { Bot } from './bot';
@@ -72,7 +73,8 @@ function dealGain(p: Perception, deal: Deal): number {
  * - ganging up (hard and up) on a runaway leader: an alliance with the strongest neutral neighbour besides it, and a
  *   joint attack on it asked of each ally;
  * - at war with gold idle for `richIncomeTicks` of income: troops bought from the strongest nation not at war with us.
- * With no alliances in the rules it never proposes an alliance.
+ * With no alliances in the rules, or in teams mode (teammates are allies already, other teams never), it never proposes
+ * an alliance.
  */
 export function proposeDiplomacy(game: Game, p: Perception, bot: Bot): Command[] {
   const ai = CONFIG.ai;
@@ -89,7 +91,7 @@ export function proposeDiplomacy(game: Game, p: Perception, bot: Bot): Command[]
   }
 
   const ganging = bot.profile.gangUp && p.leader !== 0 && p.leader !== me && p.leaderShare > ai.gangUpShare;
-  const partners = game.tuning.alliances
+  const partners = game.tuning.alliances && game.rules.mode !== 'teams'
     ? p.neighbors.filter((n) => n.relation === 'neutral' && game.relations.trust(me, n.id) >= ai.allyTrust
       && !pending(game, 'alliance', me, n.id))
     : [];
@@ -162,15 +164,15 @@ function troopPurchase(game: Game, p: Perception): Command | null {
 }
 
 /**
- * The ally `p.me` would betray now, or null; only profiles that betray. Boxed in by allies (no free land, every
- * neighbour an ally) with troops above the band, the ally that scores best, whatever the personality. Otherwise only
- * with a betrayal weight of `betrayalWeight` or more, an ally that scores `betrayalScore` times our best other target
- * and has under `betrayalDensity` of our density.
+ * The ally `p.me` would betray now, or null; only profiles that betray, and never a teammate. Boxed in by allies (no
+ * free land, every neighbour an ally) with troops above the band, the ally that scores best, whatever the personality.
+ * Otherwise only with a betrayal weight of `betrayalWeight` or more, an ally that scores `betrayalScore` times our best
+ * other target and has under `betrayalDensity` of our density.
  */
 export function considerBetrayal(game: Game, p: Perception, bot: Bot): NationId | null {
   const ai = CONFIG.ai;
   if (!bot.profile.betrayal) return null;
-  const allies = p.neighbors.filter((n) => n.relation === 'allied');
+  const allies = p.neighbors.filter((n) => n.relation === 'allied' && !sameTeam(game, p.me, n.id));
   if (allies.length === 0) return null;
   // boxed in by allies with troops piling up: the weakest-defended ally is the only way on
   if (p.neutralBorder === 0 && allies.length === p.neighbors.length && p.troopRatio > bot.profile.troopBand[1]) {

@@ -35,7 +35,12 @@ export type Command =
   | { type: 'respond'; nation: NationId; requestId: number; accept: boolean }
   | { type: 'embargo'; nation: NationId; with: NationId; on: boolean }
   | { type: 'debugGrant'; nation: NationId; gold?: number; troops?: number }; // only when GameSetup.debug
-export interface GameResult { winners: NationId[]; reason: 'landShare' | 'lastStanding' | 'alliance' }
+export interface GameResult {
+  winners: NationId[];
+  reason: 'landShare' | 'lastStanding' | 'alliance';
+  /** The winning team; only in teams mode. */
+  team?: number;
+}
 export type GameEvent =
   | { type: 'rejected'; nation: NationId; reason: string }
   | { type: 'spawned'; nation: NationId; tile: TileIndex }

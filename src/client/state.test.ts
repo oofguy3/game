@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_RULES } from '../shared/rules';
 import type { GameEvent } from '../shared/types';
 import type { GameUpdate, InitPayload, NationSnap } from '../worker/protocol';
 import { ClientState } from './state';
@@ -8,9 +9,10 @@ const init: InitPayload = {
   height: 2,
   terrain: new Uint8Array(8).fill(1),
   playerId: 1,
+  rules: { ...DEFAULT_RULES },
   nations: [
-    { id: 1, name: 'You', color: 0x3b82f6, isPlayer: true },
-    { id: 2, name: 'Varlonia', color: 0xd31717, isPlayer: false },
+    { id: 1, name: 'You', color: 0x3b82f6, isPlayer: true, team: 0 },
+    { id: 2, name: 'Varlonia', color: 0xd31717, isPlayer: false, team: 0 },
   ],
   spawnEndsAt: 100,
   look: { latitude: { top: 72, bottom: -72 }, seed: 1, dryBands: false },

@@ -34,7 +34,10 @@ export function lookOptions(choice: MapChoice): LookOptions {
   return { latitude: { top: RANDOM_MAP_LATITUDE, bottom: -RANDOM_MAP_LATITUDE }, seed: choice.seed, dryBands: false };
 }
 
-/** The match's fixed facts: the map (a copy of its terrain, safe to transfer), who's playing, and how to dress it. */
+/**
+ * The match's fixed facts: the map (a copy of its terrain, safe to transfer), the rules, who's playing and on which
+ * team, and how to dress it.
+ */
 export function buildInit(match: Match, look: LookOptions): InitPayload {
   const { game } = match;
   return {
@@ -42,7 +45,10 @@ export function buildInit(match: Match, look: LookOptions): InitPayload {
     height: game.map.height,
     terrain: new Uint8Array(game.map.terrain),
     playerId: game.playerId,
-    nations: game.nations.slice(1).map((n) => ({ id: n.id, name: n.name, color: n.color, isPlayer: n.isPlayer })),
+    rules: { ...game.rules },
+    nations: game.nations.slice(1).map((n) => ({
+      id: n.id, name: n.name, color: n.color, isPlayer: n.isPlayer, team: n.team,
+    })),
     spawnEndsAt: game.spawnEndsAt,
     look,
   };

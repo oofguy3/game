@@ -2,6 +2,7 @@ import { CONFIG } from '../../shared/config';
 import type { Deal, DiplomacyRequest, NationId } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
+import { sameTeam } from '../core/teams';
 import { cancelAttacksBetween } from './attacks';
 import { removeUnit } from './units';
 
@@ -15,10 +16,17 @@ function counterpartProblem(game: Game, from: NationId, to: NationId): string | 
   return null;
 }
 
+/** Whether `a` and `b` are both on teams, and not the same one. */
+function onOtherTeams(game: Game, a: NationId, b: NationId): boolean {
+  const ta = game.nations[a].team;
+  const tb = game.nations[b].team;
+  return ta > 0 && tb > 0 && ta !== tb;
+}
+
 /**
  * Sends `to` a request of `kind` from `from`, open for `requestTtlTicks`, and emits `request`. Rejected for itself, an
- * unknown or dead nation, an alliance when the rules have none, a request of the same kind from `from` to `to` still
- * open, an alliance with an ally, and peace without a war.
+ * unknown or dead nation, an alliance when the rules have none, an alliance with a nation of another team, a request
+ * of the same kind from `from` to `to` still open, an alliance with an ally, and peace without a war.
  */
 export function createRequest(
   game: Game, kind: DiplomacyRequest['kind'], from: NationId, to: NationId, extra: { deal?: Deal; target?: NationId } = {},
@@ -26,6 +34,7 @@ export function createRequest(
   const problem = counterpartProblem(game, from, to);
   if (problem) return fail(problem);
   if (kind === 'alliance' && !game.tuning.alliances) return fail('no alliances');
+  if (kind === 'alliance' && onOtherTeams(game, from, to)) return fail('other team');
   for (const r of game.requests.values()) {
     if (r.kind === kind && r.from === from && r.to === to) return fail('already proposed');
   }
@@ -154,11 +163,13 @@ function resolve(game: Game, request: DiplomacyRequest, accepted: boolean): void
 
 /**
  * `nation` leaves its alliance with `other`; they are neutral. Every other nation's trust in the betrayer drops by
- * `betrayalTrustPenalty` (never below 0) and the victim's falls to 0. Emits `relation` and `betrayal`.
+ * `betrayalTrustPenalty` (never below 0) and the victim's falls to 0. Emits `relation` and `betrayal`. A teammate
+ * can't be left.
  */
 export function breakAlliance(game: Game, nation: NationId, other: NationId): CommandResult {
   const problem = counterpartProblem(game, nation, other);
   if (problem) return fail(problem);
+  if (sameTeam(game, nation, other)) return fail('teammate');
   if (game.relations.get(nation, other) !== 'allied') return fail('not allied');
   game.relations.set(nation, other, 'neutral');
   game.emit({ type: 'relation', a: nation, b: other, relation: 'neutral' });
@@ -172,10 +183,14 @@ export function breakAlliance(game: Game, nation: NationId, other: NationId): Co
   return { ok: true };
 }
 
-/** `nation` starts or lifts its embargo on `other`: no new trade between them while either side has one. */
+/**
+ * `nation` starts or lifts its embargo on `other`: no new trade between them while either side has one. An embargo
+ * on a teammate can't be started.
+ */
 export function setEmbargo(game: Game, nation: NationId, other: NationId, on: boolean): CommandResult {
   const problem = counterpartProblem(game, nation, other);
   if (problem && problem !== 'eliminated') return fail(problem);
+  if (on === true && sameTeam(game, nation, other)) return fail('teammate');
   game.relations.setEmbargo(nation, other, on === true);
   return { ok: true };
 }

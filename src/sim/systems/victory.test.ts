@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Command, GameEvent, GameResult, NationId, TileIndex } from '../../shared/types';
 import { Game } from '../core/game';
+import type { Nation } from '../core/nation';
 import { isLand } from '../map/grid';
 import { generateRandomMap } from '../map/randomMap';
 import { makeTestGame } from '../testing/fixtures';
@@ -60,6 +61,60 @@ describe('checkVictory', () => {
     const g = makeTestGame({ map: ['####'], owners: ['a.b.'], nations: [{}, { alive: false }, {}], victory: true });
     g.relations.set(1, 3, 'allied');
     expect(checkVictory(g)).toEqual({ winners: [1, 3], reason: 'alliance' });
+  });
+
+  it('free-for-all results have no team field', () => {
+    const share = makeTestGame({ map: ['#####'], owners: ['aaaa.'], nations: [{}], victory: true });
+    const alone = makeTestGame({ map: ['#####'], owners: ['a....'], nations: [{}, { alive: false }], victory: true });
+    const allies = makeTestGame({ map: ['####'], owners: ['a..b'], nations: [{}, {}], victory: true });
+    allies.relations.set(1, 2, 'allied');
+    for (const g of [share, alone, allies]) expect(Object.keys(checkVictory(g)!)).toEqual(['winners', 'reason']);
+  });
+});
+
+describe('checkVictory with teams', () => {
+  /** Ten land tiles; a and b on team 1, c on team 2. */
+  const teams = (owners: string, nations: Partial<Nation>[] = [{}, {}, {}]): Game =>
+    makeTestGame({ map: ['##########'], owners: [owners], nations, victory: true, teams: [1, 1, 2] });
+
+  it('teams: a team holding the win share together wins, its knocked-out members included', () => {
+    // a and b hold 4 tiles each: neither alone has 80%, together they do
+    expect(checkVictory(teams('aaaabbbbc.'))).toEqual({ winners: [1, 2], reason: 'landShare', team: 1 });
+    // b is out; a holds 80% and wins with b
+    expect(checkVictory(teams('aaaaaaaac.', [{}, { alive: false }, {}])))
+      .toEqual({ winners: [1, 2], reason: 'landShare', team: 1 });
+    // the other team, at 80% with team 1 still alive
+    expect(checkVictory(teams('abcccccccc'))).toEqual({ winners: [3], reason: 'landShare', team: 2 });
+  });
+
+  it('teams: only living members count toward the share', () => {
+    // b is out but still marked on 4 tiles: a's 4 alone fall short
+    expect(checkVictory(teams('aaaabbbbc.', [{}, { alive: false }, {}]))).toBeNull();
+  });
+
+  it('teams: the last team with living members wins', () => {
+    expect(checkVictory(teams('ab........', [{}, {}, { alive: false }])))
+      .toEqual({ winners: [1, 2], reason: 'lastStanding', team: 1 });
+    // one living member is enough, and the knocked-out ones win with it
+    expect(checkVictory(teams('.b........', [{ alive: false }, {}, { alive: false }])))
+      .toEqual({ winners: [1, 2], reason: 'lastStanding', team: 1 });
+    expect(checkVictory(teams('c.........', [{ alive: false }, { alive: false }, {}])))
+      .toEqual({ winners: [3], reason: 'lastStanding', team: 2 });
+  });
+
+  it('teams: no winner while two teams have living members below the share', () => {
+    expect(checkVictory(teams('aaabbbcc..'))).toBeNull();
+    expect(checkVictory(teams('a.......c.', [{}, { alive: false }, {}]))).toBeNull();
+    // nobody left at all
+    expect(checkVictory(teams('..........', [{ alive: false }, { alive: false }, { alive: false }]))).toBeNull();
+  });
+
+  it('teams: the win share comes from the rules', () => {
+    const g = makeTestGame({
+      map: ['##########'], owners: ['aaabbbcc..'], nations: [{}, {}, {}], victory: true, teams: [1, 1, 2],
+      rules: { winShare: 0.6 },
+    });
+    expect(checkVictory(g)).toEqual({ winners: [1, 2], reason: 'landShare', team: 1 });
   });
 });
 

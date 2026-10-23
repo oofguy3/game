@@ -7,6 +7,8 @@ export interface Nation {
   /** 0xRRGGBB. */
   color: number;
   isPlayer: boolean;
+  /** 1–4 in teams mode, 0 in free-for-all. */
+  team: number;
   difficulty: Difficulty | null;
   personality: Personality | null;
   alive: boolean;
@@ -34,12 +36,13 @@ export function emptyBuildingCounts(): Record<BuildingType, number> {
   return counts;
 }
 
-/** A living, unspawned nation with nothing owned. */
+/** A living, unspawned nation with nothing owned, on no team. */
 export function createNation(
   init: Pick<Nation, 'id' | 'name' | 'color' | 'isPlayer' | 'difficulty' | 'personality'>,
 ): Nation {
   return {
     ...init,
+    team: 0,
     alive: true,
     spawned: false,
     spawnTile: -1,
