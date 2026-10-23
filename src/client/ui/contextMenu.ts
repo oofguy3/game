@@ -5,7 +5,7 @@ import type { BuildingSnap } from '../../worker/protocol';
 import { formatNumber } from '../format';
 import type { MapInfo } from '../mapInfo';
 import type { ClientState } from '../state';
-import { h } from './dom';
+import { h, showPanel } from './dom';
 import { playerBuildingCost } from './hud';
 import { BUILDING_LABELS } from './labels';
 
@@ -216,7 +216,7 @@ export class ContextMenu {
     });
     const header = back ? h('button', { class: 'menu-item menu-back', text: '‹ Back', on: { click: () => this.render(back, null) } }) : null;
     this.el.replaceChildren(...(header ? [header] : []), ...buttons);
-    this.el.classList.remove('hidden');
+    showPanel(this.el);
     // keep it on screen
     const r = this.el.getBoundingClientRect();
     const left = Math.max(4, Math.min(this.at.x, window.innerWidth - r.width - 4));

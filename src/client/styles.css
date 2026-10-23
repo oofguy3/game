@@ -1,6 +1,11 @@
 :root {
-  --panel: rgba(15, 23, 42, 0.86);
-  --panel-border: rgba(148, 163, 184, 0.25);
+  /* one shared style: dark glass panels with soft shadows */
+  --glass: rgba(15, 23, 42, 0.72);
+  --glass-strong: rgba(15, 23, 42, 0.9);
+  --line: rgba(148, 163, 184, 0.22);
+  --radius: 12px;
+  --shadow: 0 10px 30px rgba(2, 6, 23, 0.45);
+  --enter-ms: 160ms;
   --text: #e2e8f0;
   --muted: #94a3b8;
   --accent: #3b82f6;
@@ -29,24 +34,36 @@ canvas.map.placing { cursor: crosshair; }
 button {
   font: inherit;
   color: var(--text);
-  background: rgba(51, 65, 85, 0.9);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  background: rgba(51, 65, 85, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 6px 10px;
   cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
 }
-button:hover:not(:disabled) { background: rgba(71, 85, 105, 0.95); }
+button:hover:not(:disabled) { background: rgba(71, 85, 105, 0.9); border-color: rgba(148, 163, 184, 0.45); }
+button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.4; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); font-weight: 600; }
-button.primary:hover { background: #2563eb; }
+button.primary:hover:not(:disabled) { background: #2563eb; border-color: #2563eb; }
+h1, h2, .heading { font-weight: 800; letter-spacing: 0.08em; }
 
 .panel {
   position: absolute;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 8px 10px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+/* panels slide in when they open */
+.enter { animation: panel-in var(--enter-ms) ease-out; }
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
 
@@ -67,12 +84,15 @@ button.primary:hover { background: #2563eb; }
 
 /* Event feed */
 .feed { position: absolute; left: 12px; bottom: 132px; width: 340px; pointer-events: none; display: flex; flex-direction: column; gap: 4px; }
-.feed-line { background: var(--panel); border-radius: 6px; padding: 4px 8px; font-size: 13px; border: 1px solid var(--panel-border); }
+.feed-line {
+  background: var(--glass); border-radius: 8px; padding: 4px 9px; font-size: 13px; border: 1px solid var(--line);
+  backdrop-filter: blur(10px); animation: panel-in var(--enter-ms) ease-out;
+}
 
 /* Banner */
 .banner {
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 999px;
+  background: var(--glass-strong); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
   padding: 8px 18px; font-weight: 600; pointer-events: none; white-space: nowrap;
 }
 .banner.error { background: rgba(127, 29, 29, 0.95); top: 60px; white-space: normal; max-width: 90vw; pointer-events: auto; }
@@ -81,8 +101,8 @@ button.primary:hover { background: #2563eb; }
 .hud {
   position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
   width: min(1180px, calc(100vw - 24px));
-  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
-  padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  backdrop-filter: blur(10px) saturate(1.2); padding: 10px; display: flex; flex-direction: column; gap: 8px;
 }
 .stats { display: flex; gap: 22px; align-items: flex-end; flex-wrap: wrap; }
 .stat { display: flex; flex-direction: column; min-width: 120px; }
@@ -94,6 +114,7 @@ button.primary:hover { background: #2563eb; }
 .stat.attack input { width: 180px; accent-color: var(--accent); }
 .builds { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; }
 button.build { display: flex; flex-direction: column; align-items: center; padding: 4px 2px; font-size: 12px; position: relative; }
+button.build .build-icon { margin: 2px 0 1px; }
 button.build .key { position: absolute; top: 2px; left: 5px; font-size: 10px; color: var(--muted); }
 button.build .label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 button.build .cost { color: #facc15; font-variant-numeric: tabular-nums; }
@@ -125,7 +146,7 @@ button.build.selected { outline: 2px solid var(--accent); background: rgba(59, 1
 .deal-field input { width: 100%; }
 .deal-field input, .diplomacy-joint select {
   font: inherit; color: var(--text); background: rgba(30, 41, 59, 0.95);
-  border: 1px solid var(--panel-border); border-radius: 6px; padding: 4px 6px; min-width: 0;
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; min-width: 0;
 }
 .diplomacy-joint { display: flex; align-items: center; gap: 6px; }
 .diplomacy-joint .panel-title { margin: 0; }
@@ -144,7 +165,8 @@ button.build.selected { outline: 2px solid var(--accent); background: rgba(59, 1
   background: radial-gradient(circle at 50% 30%, rgba(30, 58, 138, 0.55), rgba(2, 6, 23, 0.92));
 }
 .menu-card, .end-card {
-  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px;
+  background: var(--glass-strong); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+  backdrop-filter: blur(12px) saturate(1.2);
   padding: 26px 28px; width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px;
 }
 .menu-card h1, .end-card h1 { margin: 0; font-size: 30px; letter-spacing: 0.01em; }
@@ -153,7 +175,7 @@ button.build.selected { outline: 2px solid var(--accent); background: rgba(59, 1
 .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .field select, .field input[type='text'], .field input[type='number'] {
   font: inherit; color: var(--text); background: rgba(30, 41, 59, 0.95);
-  border: 1px solid var(--panel-border); border-radius: 6px; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px;
 }
 .random-only { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .bots { display: flex; gap: 10px; align-items: center; }

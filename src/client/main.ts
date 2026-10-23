@@ -121,7 +121,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
 
   const pause = new PauseButton((paused) => bridge.setPaused(paused));
   let controls: Controls | null = null;
-  const hud = new Hud(state, (type) => selectBuild(type));
+  const hud = new Hud(state, (type) => selectBuild(type), colors.get(init.playerId) ?? 0x3b82f6);
   const leaderboard = new Leaderboard(state);
   const feed = new EventFeed(state, names);
   const end = new EndScreen(state, Math.max(1, land), backToMenu);
@@ -130,8 +130,15 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   const requests = new RequestPopups(state, names, send);
   const menu = new ContextMenu();
   document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
-  // fit the whole map in the space above the bottom bar
-  camera.fitMap(hud.el.getBoundingClientRect().height + HUD_GAP);
+  // fit the whole map in the space above the bottom bar, and keep the news feed just above it
+  const hudHeight = (): number => hud.el.getBoundingClientRect().height;
+  camera.fitMap(hudHeight() + HUD_GAP);
+  const placeFeed = (): void => {
+    feed.el.style.bottom = `${Math.round(hudHeight() + HUD_GAP)}px`;
+  };
+  placeFeed();
+  // the bar grows once its numbers fill in, and changes with the window
+  new ResizeObserver(placeFeed).observe(hud.el);
 
   const canBuild = (type: BuildingType): boolean => {
     const button = hud.el.querySelector<HTMLButtonElement>(`button[data-building="${type}"]`);

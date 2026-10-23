@@ -3,6 +3,7 @@ import { BUILDING_TYPES } from '../../shared/types';
 import type { BuildingType } from '../../shared/types';
 import { formatNumber } from '../format';
 import type { ClientState } from '../state';
+import { createBuildIcon } from './buildIcon';
 import { h, setText } from './dom';
 import { BUILDING_HINTS, BUILDING_LABELS } from './labels';
 
@@ -28,7 +29,8 @@ export class Hud {
   private readonly buttons = new Map<BuildingType, { button: HTMLButtonElement; cost: HTMLElement }>();
   private selected: BuildingType | null = null;
 
-  constructor(private readonly state: ClientState, private readonly onBuild: (type: BuildingType) => void) {
+  /** `playerColor` paints the icons on the build buttons. */
+  constructor(private readonly state: ClientState, private readonly onBuild: (type: BuildingType) => void, playerColor: number) {
     this.slider.value = '30';
     this.slider.addEventListener('input', () => this.renderRatio());
     const builds = h('div', { class: 'builds' });
@@ -39,7 +41,8 @@ export class Hud {
         title: `${BUILDING_LABELS[type]} (${BUILD_HOTKEYS[i]}): ${BUILDING_HINTS[type]}`,
         attrs: { 'data-building': type },
         on: { click: () => this.onBuild(type) },
-      }, h('span', { class: 'key', text: BUILD_HOTKEYS[i] }), h('span', { class: 'label', text: BUILDING_LABELS[type] }), cost);
+      }, h('span', { class: 'key', text: BUILD_HOTKEYS[i] }), createBuildIcon(type, playerColor),
+      h('span', { class: 'label', text: BUILDING_LABELS[type] }), cost);
       this.buttons.set(type, { button, cost });
       builds.append(button);
     });

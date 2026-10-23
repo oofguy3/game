@@ -2,7 +2,7 @@ import type { Command, Deal, NationId, Relation } from '../../shared/types';
 import { formatNumber } from '../format';
 import { css } from '../render/palette';
 import type { ClientState } from '../state';
-import { h, setText } from './dom';
+import { h, setText, showPanel } from './dom';
 
 const RELATION_LABELS: Record<Relation, string> = { neutral: 'Neutral', allied: 'Allied', war: 'At war' };
 const DEAL_FIELDS: { key: keyof Deal; label: string }[] = [
@@ -96,7 +96,7 @@ export class DiplomacyPanel {
   open(id: NationId): void {
     this.nation = id;
     this.shownKey = '';
-    this.el.classList.remove('hidden');
+    showPanel(this.el);
     this.update();
   }
 
