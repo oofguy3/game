@@ -1,4 +1,4 @@
-import type { DiplomacyRequest, GameEvent, GameResult, NationId, Phase } from '../shared/types';
+import type { DiplomacyRequest, GameEvent, GameResult, NationId, Phase, TileIndex } from '../shared/types';
 import type { BuildingSnap, GameUpdate, InitPayload, NationSnap, UnitSnap } from '../worker/protocol';
 
 const FEED_LENGTH = 50;
@@ -16,6 +16,12 @@ export class ClientState {
   feed: GameEvent[] = [];
   requests: DiplomacyRequest[] = [];
   result: GameResult | null = null;
+  /** Running attacks between two nations as [attacker, target], from the latest update. */
+  fronts: [NationId, NationId][] = [];
+  /** How many tiles became the player's in the latest update. */
+  gained = 0;
+  /** The player's tiles taken by someone else in the latest update. */
+  lost: TileIndex[] = [];
   /** Called with every event of each update (the feed keeps only the player's). */
   onEvents: ((events: GameEvent[]) => void) | null = null;
   private changed: number[] = [];
@@ -41,14 +47,26 @@ export class ClientState {
     this.feed = [];
     this.requests = [];
     this.result = null;
+    this.fronts = [];
+    this.gained = 0;
+    this.lost = [];
     this.changed = [];
   }
 
   applyUpdate(u: GameUpdate): void {
+    const me = this.init.playerId;
+    this.gained = 0;
+    this.lost = [];
     for (let i = 0; i < u.changedTiles.length; i++) {
-      this.owner[u.changedTiles[i]] = u.changedOwners[i];
-      this.changed.push(u.changedTiles[i]);
+      const t = u.changedTiles[i];
+      const before = this.owner[t];
+      const after = u.changedOwners[i];
+      if (after === me && before !== me) this.gained++;
+      else if (before === me && after !== me) this.lost.push(t);
+      this.owner[t] = after;
+      this.changed.push(t);
     }
+    this.fronts = u.fronts;
     this.tick = u.tick;
     this.phase = u.phase;
     this.nations = new Map(u.nations.map((n) => [n.id, n]));

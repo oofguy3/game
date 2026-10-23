@@ -24,6 +24,13 @@ export type FromWorker =
   | { type: 'update'; update: GameUpdate }
   | { type: 'error'; message: string };
 
+/** How the page should dress the map: the latitudes of its top and bottom rows, a seed, and dry subtropical bands. */
+export interface LookOptions {
+  latitude: { top: number; bottom: number };
+  seed: number;
+  dryBands: boolean;
+}
+
 /** Everything that doesn't change during a match, sent once. */
 export interface InitPayload {
   width: number;
@@ -32,6 +39,7 @@ export interface InitPayload {
   playerId: NationId;
   nations: { id: NationId; name: string; color: number; isPlayer: boolean }[];
   spawnEndsAt: number;
+  look: LookOptions;
 }
 
 export interface NationSnap {
@@ -88,4 +96,6 @@ export interface GameUpdate {
   /** Pending requests addressed to the player. */
   requests: DiplomacyRequest[];
   result: GameResult | null;
+  /** Running attacks between two nations as [attacker, target], each pair once, sorted. */
+  fronts: [NationId, NationId][];
 }

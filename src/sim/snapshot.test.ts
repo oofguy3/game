@@ -4,7 +4,8 @@ import type { DiplomacyRequest } from '../shared/types';
 import type { GameSetup } from './core/game';
 import { tileOf } from './map/grid';
 import { Match } from './match';
-import { buildInit, buildUpdate } from './snapshot';
+import { buildInit, buildUpdate, lookOptions } from './snapshot';
+import { startAttack } from './systems/attacks';
 import { mapFromAscii } from './testing/asciiMap';
 
 const setup = (rows: string[], overrides: Partial<GameSetup> = {}): GameSetup => ({
@@ -15,11 +16,20 @@ const setup = (rows: string[], overrides: Partial<GameSetup> = {}): GameSetup =>
   ...overrides,
 });
 const plains = (w: number, h: number): string[] => Array.from({ length: h }, () => '#'.repeat(w));
+const LOOK = { latitude: { top: 72, bottom: -72 }, seed: 1, dryBands: false };
+
+describe('lookOptions', () => {
+  it('the world map uses its projection, seed 1 and dry bands; random maps ±72° and their own seed', () => {
+    expect(lookOptions({ kind: 'world' })).toEqual({ latitude: { top: 78, bottom: -58 }, seed: 1, dryBands: true });
+    expect(lookOptions({ kind: 'random', size: 'small', seed: 99 }))
+      .toEqual({ latitude: { top: 72, bottom: -72 }, seed: 99, dryBands: false });
+  });
+});
 
 describe('buildInit', () => {
   it('describes the map and nations with a copy of the terrain', () => {
     const m = new Match(setup(plains(6, 4)));
-    const init = buildInit(m);
+    const init = buildInit(m, LOOK);
     expect(init).toMatchObject({ width: 6, height: 4, playerId: 1, spawnEndsAt: CONFIG.spawn.phaseTicks });
     expect(init.nations.map((n) => [n.id, n.isPlayer])).toEqual([[1, true], [2, false], [3, false]]);
     expect(init.nations[0].name).toBe(m.game.nations[1].name);
@@ -29,7 +39,27 @@ describe('buildInit', () => {
   });
 });
 
+describe('buildInit look', () => {
+  it('carries the look options it is given', () => {
+    const look = { latitude: { top: 10, bottom: -10 }, seed: 3, dryBands: false };
+    expect(buildInit(new Match(setup(plains(6, 4))), look).look).toEqual(look);
+  });
+});
+
 describe('buildUpdate', () => {
+  it('fronts lists each running attack between two nations once, sorted, without attacks on empty land', () => {
+    // empty land, then nations 1, 2 and 3 side by side, then empty land
+    const m = new Match(setup(plains(8, 1)));
+    const { game } = m;
+    for (const [tile, owner] of [[1, 1], [2, 1], [3, 2], [4, 2], [5, 3], [6, 3]]) game.setOwner(tile, owner);
+    for (const n of game.nations) n.troops = 1000;
+    expect(startAttack(game, 2, 3, 50).ok).toBe(true);
+    expect(startAttack(game, 1, 2, 50).ok).toBe(true);
+    expect(startAttack(game, 1, 2, 30).ok).toBe(true);
+    expect(startAttack(game, 1, 0, 20).ok).toBe(true);
+    expect(buildUpdate(m).fronts).toEqual([[1, 2], [2, 3]]);
+  });
+
   it('reports each changed tile once, with its current owner', () => {
     const m = new Match(setup(plains(6, 4)));
     const { game } = m;

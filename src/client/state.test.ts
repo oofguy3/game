@@ -13,6 +13,7 @@ const init: InitPayload = {
     { id: 2, name: 'Varlonia', color: 0xd31717, isPlayer: false },
   ],
   spawnEndsAt: 100,
+  look: { latitude: { top: 72, bottom: -72 }, seed: 1, dryBands: false },
 };
 
 const snap = (id: number, over: Partial<NationSnap> = {}): NationSnap => ({
@@ -23,10 +24,33 @@ const snap = (id: number, over: Partial<NationSnap> = {}): NationSnap => ({
 
 const update = (over: Partial<GameUpdate> = {}): GameUpdate => ({
   tick: 1, phase: 'playing', changedTiles: new Uint32Array(), changedOwners: new Uint16Array(),
-  nations: [snap(1), snap(2)], buildings: null, units: [], events: [], requests: [], result: null, ...over,
+  nations: [snap(1), snap(2)], buildings: null, units: [], events: [], requests: [], result: null, fronts: [], ...over,
 });
 
 describe('ClientState', () => {
+  it('counts the tiles the player gained and lists the tiles they lost in each update', () => {
+    const s = new ClientState();
+    s.applyInit(init);
+    s.applyUpdate(update({ changedTiles: new Uint32Array([0]), changedOwners: new Uint16Array([1]) }));
+    expect(s.gained).toBe(1);
+    expect(s.lost).toEqual([]);
+    s.applyUpdate(update({ changedTiles: new Uint32Array([0, 1, 2]), changedOwners: new Uint16Array([2, 1, 1]) }));
+    expect(s.gained).toBe(2);
+    expect(s.lost).toEqual([0]);
+    s.applyUpdate(update());
+    expect(s.gained).toBe(0);
+    expect(s.lost).toEqual([]);
+  });
+
+  it('keeps the fronts of the latest update', () => {
+    const s = new ClientState();
+    s.applyInit(init);
+    s.applyUpdate(update({ fronts: [[2, 3]] }));
+    expect(s.fronts).toEqual([[2, 3]]);
+    s.applyUpdate(update());
+    expect(s.fronts).toEqual([]);
+  });
+
   it('applyUpdate writes owners and nation snaps', () => {
     const s = new ClientState();
     s.applyInit(init);
