@@ -1,0 +1,122 @@
+import type { NationId } from '../../shared/types';
+import type { Camera } from '../camera';
+import { formatNumber } from '../format';
+import type { ClientState } from '../state';
+import type { Effects } from './effects';
+import { drawBuildingIcon } from './icons';
+import { css, TERRAIN_COLORS } from './palette';
+import { TerritoryLayer } from './territoryLayer';
+import { drawUnits } from './units';
+import type { UnitInterpolator } from './units';
+
+/** Labels smaller than this many pixels are hidden. */
+const MIN_LABEL_PX = 8;
+const MAX_LABEL_PX = 64;
+
+/** Draws the map, buildings, units, nation names and effects onto the game canvas, every frame. */
+export class Renderer {
+  private layer: TerritoryLayer | null = null;
+  private offscreen: HTMLCanvasElement | null = null;
+  private image: ImageData | null = null;
+  private colors = new Map<NationId, number>();
+  private names = new Map<NationId, string>();
+  private readonly ctx: CanvasRenderingContext2D;
+
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly state: ClientState,
+    private readonly camera: Camera,
+    private readonly units: UnitInterpolator,
+    private readonly effects: Effects,
+  ) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D is not available');
+    this.ctx = ctx;
+  }
+
+  draw(): void {
+    const { state, ctx, camera } = this;
+    if (!state.init) return;
+    this.syncTerritory();
+    const z = camera.zoom;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = css(TERRAIN_COLORS[0]);
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    const { width, height } = state.init;
+    ctx.drawImage(this.offscreen!, -camera.x * z, -camera.y * z, width * z, height * z);
+
+    const iconSize = Math.min(28, Math.max(7, z * 2.4));
+    for (const b of state.buildings) {
+      const p = camera.tileToScreen((b.tile % width) + 0.5, Math.floor(b.tile / width) + 0.5);
+      if (!this.onScreen(p.x, p.y, iconSize)) continue;
+      drawBuildingIcon(ctx, b.type, p.x, p.y, iconSize, this.colors.get(b.owner) ?? 0x808080, b.underConstruction ? 0.5 : 1);
+    }
+    const now = performance.now();
+    drawUnits(ctx, camera, this.units, this.colors, now, iconSize, (x, y) => this.onScreen(x, y, iconSize));
+    this.drawLabels();
+    this.effects.draw(ctx, camera, now, this.canvas.width, this.canvas.height);
+  }
+
+  /** Creates the territory image on first use, then repaints the tiles whose owner changed. */
+  private syncTerritory(): void {
+    const { init } = this.state;
+    if (!this.layer) {
+      this.colors = new Map(init.nations.map((n) => [n.id, n.color]));
+      this.names = new Map(init.nations.map((n) => [n.id, n.name]));
+      this.layer = new TerritoryLayer(init.width, init.height, init.terrain, this.colors);
+      this.offscreen = document.createElement('canvas');
+      this.offscreen.width = init.width;
+      this.offscreen.height = init.height;
+      this.image = new ImageData(new Uint8ClampedArray(this.layer.pixels.buffer as ArrayBuffer), init.width, init.height);
+    }
+    const changed = this.state.drainChangedTiles();
+    if (changed.length > 0) this.layer.applyTiles(this.state.owner, changed);
+    const d = this.layer.dirty;
+    if (d) {
+      this.offscreen!.getContext('2d')!.putImageData(this.image!, 0, 0, d.x0, d.y0, d.x1 - d.x0 + 1, d.y1 - d.y0 + 1);
+      this.layer.dirty = null;
+    }
+  }
+
+  private drawLabels(): void {
+    const { ctx, camera, state } = this;
+    const spawning = state.phase === 'spawn';
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const n of state.nations.values()) {
+      if (!n.alive || !n.label) continue;
+      const p = camera.tileToScreen(n.label.x + 0.5, n.label.y + 0.5);
+      if (spawning && n.spawned) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (6 + 4 * pulse) * Math.max(1, camera.zoom / 2), 0, Math.PI * 2);
+        ctx.strokeStyle = css(this.colors.get(n.id) ?? 0xffffff);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+      const px = Math.min(MAX_LABEL_PX, n.label.size * camera.zoom);
+      if (px < MIN_LABEL_PX) continue;
+      ctx.font = `600 ${Math.round(px)}px system-ui, sans-serif`;
+      ctx.lineWidth = Math.max(2, px / 6);
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.75)';
+      ctx.fillStyle = '#ffffff';
+      const name = this.names.get(n.id) ?? '';
+      ctx.strokeText(name, p.x, p.y);
+      ctx.fillText(name, p.x, p.y);
+      if (px >= 14) {
+        const sub = Math.round(px * 0.6);
+        ctx.font = `500 ${sub}px system-ui, sans-serif`;
+        ctx.lineWidth = Math.max(2, sub / 6);
+        const troops = formatNumber(n.troops);
+        ctx.strokeText(troops, p.x, p.y + px * 0.85);
+        ctx.fillText(troops, p.x, p.y + px * 0.85);
+      }
+    }
+  }
+
+  private onScreen(x: number, y: number, margin: number): boolean {
+    return x > -margin && y > -margin && x < this.canvas.width + margin && y < this.canvas.height + margin;
+  }
+}
