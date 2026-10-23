@@ -1,14 +1,20 @@
 import { GAME_NAME } from '../shared/constants';
 import type { BuildingType, Command, Difficulty, MapChoice, MapSize } from '../shared/types';
 import type { GameUpdate, InitPayload, StartOptions } from '../worker/protocol';
+import { SoundDirector } from './audio/director';
+import { Mixer } from './audio/mixer';
+import { WebAudioOutput } from './audio/webAudio';
 import { SimBridge } from './bridge';
 import { Camera } from './camera';
 import { Controls } from './input';
 import { MapInfo } from './mapInfo';
 import { Effects } from './render/effects';
+import { GlMap } from './render/look/glMap';
+import { buildTerrainLook } from './render/look/terrainLook';
 import { Renderer } from './render/renderer';
 import { UnitInterpolator } from './render/units';
 import { ClientState } from './state';
+import { safeStorage } from './storage';
 import { installTestApi } from './testApi';
 import { ContextMenu, menuEntries } from './ui/contextMenu';
 import { DiplomacyPanel } from './ui/diplomacyPanel';
@@ -17,9 +23,12 @@ import { EndScreen } from './ui/endScreen';
 import { EventFeed } from './ui/eventFeed';
 import { Hud } from './ui/hud';
 import { Leaderboard } from './ui/leaderboard';
+import { PauseButton } from './ui/pauseButton';
 import { createMenu } from './ui/menu';
+import { Minimap } from './ui/minimap';
 import { RequestPopups } from './ui/requests';
-import { SpeedControls } from './ui/speedControls';
+import { SoundControls } from './ui/soundControls';
+import { startBackdrop } from './ui/titleBackdrop';
 import './styles.css';
 
 /** Space kept between the fitted map and the bottom bar, in pixels. */
@@ -28,11 +37,27 @@ const HUD_GAP = 24;
 document.title = GAME_NAME;
 const params = new URLSearchParams(location.search);
 const testMode = params.get('test') === '1';
+/** ?look=gl draws the map with the graphics chip even where the browser only emulates it (slow, but testable). */
+const allowSoftwareGl = params.get('look') === 'gl';
 const app = h('div', { class: 'app' });
 document.body.append(app);
 
+// Sound: browsers only allow it after a click or key press, so the first one starts it (and loads the files).
+const soundOutput = new WebAudioOutput(import.meta.env.BASE_URL);
+const mixer = new Mixer(soundOutput, () => performance.now(), safeStorage());
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => soundOutput.unlock(), { capture: true });
+document.addEventListener('click', (e) => {
+  if (e.target instanceof Element && e.target.closest('button')) mixer.play('click');
+}, { capture: true });
+document.addEventListener('visibilitychange', () => (document.hidden ? soundOutput.suspend() : soundOutput.resume()));
+
+/** Stops the drifting map behind the title screen, while it is showing. */
+let stopBackdrop: (() => void) | null = null;
 if (params.get('autostart') === '1') start(optionsFromUrl(params));
-else app.append(createMenu(start, testMode));
+else {
+  app.append(createMenu(start, testMode));
+  stopBackdrop = startBackdrop(app, allowSoftwareGl);
+}
 
 /** Match options from the URL (?map=random&size=small&seed=7&bots=4&difficulty=easy). */
 function optionsFromUrl(p: URLSearchParams): StartOptions {
@@ -55,23 +80,26 @@ function backToMenu(): void {
 }
 
 function start(options: StartOptions): void {
+  stopBackdrop?.();
+  stopBackdrop = null;
   app.replaceChildren();
+  const glCanvas = h('canvas', { class: 'map-gl' });
   const canvas = h('canvas', { class: 'map' });
   const loading = h('div', { class: 'banner', text: 'Building the world…' });
-  app.append(canvas, loading);
+  app.append(glCanvas, canvas, loading);
   const state = new ClientState();
-  let ui: { update(): void } | null = null;
+  let ui: { update(u?: GameUpdate): void } | null = null;
 
   const bridge = new SimBridge({
     onInit(init: InitPayload) {
       state.applyInit(init);
       loading.remove();
-      ui = buildGame(canvas, state, bridge);
+      ui = buildGame(canvas, glCanvas, state, bridge);
     },
     onUpdate(update: GameUpdate) {
       if (!state.init) return;
       state.applyUpdate(update);
-      ui?.update();
+      ui?.update(update);
     },
     onError(message: string) {
       app.append(h('div', { class: 'banner error', text: `Something went wrong: ${message}` }));
@@ -83,12 +111,17 @@ function start(options: StartOptions): void {
   });
 }
 
-/** Sets up the camera, renderer, panels and controls once the match exists; returns what to refresh on updates. */
-function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBridge): { update(): void } {
+/**
+ * Sets up the camera, renderer, panels and controls once the match exists; returns what to refresh on updates. The map
+ * is drawn by the graphics chip on `glCanvas` unless that isn't available or the URL asks for ?look=flat.
+ */
+function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state: ClientState, bridge: SimBridge): { update(u?: GameUpdate): void } {
   const { init } = state;
   const size = (): void => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    for (const c of [canvas, glCanvas]) {
+      c.width = window.innerWidth;
+      c.height = window.innerHeight;
+    }
   };
   size();
   const camera = new Camera(canvas.width, canvas.height, init.width, init.height);
@@ -100,26 +133,46 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
   const units = new UnitInterpolator();
   const effects = new Effects(state);
   state.onEvents = (events) => effects.onEvents(events, performance.now());
-  const renderer = new Renderer(canvas, state, camera, units, effects);
   const names = new Map(init.nations.map((n) => [n.id, n.name]));
   const colors = new Map(init.nations.map((n) => [n.id, n.color]));
+  const gl = params.get('look') === 'flat'
+    ? null
+    : GlMap.create(glCanvas, buildTerrainLook(init.width, init.height, init.terrain, init.look), colors, allowSoftwareGl);
+  if (!gl) glCanvas.remove();
+  const renderer = new Renderer(canvas, state, camera, units, effects, gl);
   const send = (cmd: Command): void => bridge.send(cmd);
   let land = 0;
   for (const t of init.terrain) if (t !== 0) land++;
 
-  const speed = new SpeedControls((s) => bridge.setSpeed(s));
+  const pause = new PauseButton((paused) => {
+    bridge.setPaused(paused);
+    mixer.setGamePaused(paused);
+  });
+  const soundControls = new SoundControls(mixer);
+  const director = new SoundDirector(init.playerId);
   let controls: Controls | null = null;
-  const hud = new Hud(state, (type) => selectBuild(type));
+  const hud = new Hud(state, (type) => selectBuild(type), colors.get(init.playerId) ?? 0x3b82f6);
   const leaderboard = new Leaderboard(state);
   const feed = new EventFeed(state, names);
-  const end = new EndScreen(state, Math.max(1, land), backToMenu);
+  const end = new EndScreen(state, Math.max(1, land), backToMenu, (on) => renderer.setGrey(on), colors.get(init.playerId) ?? 0x3b82f6);
   const banner = h('div', { class: 'banner' });
   const diplomacy = new DiplomacyPanel(state, names, colors, send);
   const requests = new RequestPopups(state, names, send);
   const menu = new ContextMenu();
-  document.querySelector('.app')!.append(hud.el, leaderboard.el, speed.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
-  // fit the whole map in the space above the bottom bar
-  camera.fitMap(hud.el.getBoundingClientRect().height + HUD_GAP);
+  const minimap = new Minimap(state, camera, () => renderer.territoryImage(), safeStorage());
+  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, soundControls.el, feed.el, minimap.el, diplomacy.el,
+    requests.el, banner, menu.el, end.el);
+  // fit the whole map in the space above the bottom bar, and keep the news feed just above it
+  const hudHeight = (): number => hud.el.getBoundingClientRect().height;
+  camera.fitMap(hudHeight() + HUD_GAP);
+  const placeFeed = (): void => {
+    const bottom = `${Math.round(hudHeight() + HUD_GAP)}px`;
+    feed.el.style.bottom = bottom;
+    minimap.el.style.bottom = bottom;
+  };
+  placeFeed();
+  // the bar grows once its numbers fill in, and changes with the window
+  new ResizeObserver(placeFeed).observe(hud.el);
 
   const canBuild = (type: BuildingType): boolean => {
     const button = hud.el.querySelector<HTMLButtonElement>(`button[data-building="${type}"]`);
@@ -135,7 +188,7 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
     send,
     attackRatio: () => hud.attackRatio,
     nudgeRatio: (step) => hud.nudgeRatio(step),
-    togglePause: () => speed.togglePause(),
+    togglePause: () => pause.toggle(),
     canBuild,
     onModeChange: (mode) => hud.setSelected(mode.kind === 'build' ? mode.building : null),
     openMenu: (tile, x, y) => menu.open(menuEntries(menuContext, tile), x, y),
@@ -144,14 +197,16 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
       menu.close();
       return open;
     },
+    toggleMinimap: () => minimap.toggle(),
   });
-  if (testMode) installTestApi(state, info, camera, canvas, send);
+  if (testMode) installTestApi({ state, info, camera, canvas, send, renderer, refresh: () => update(), mixer, output: soundOutput, minimap });
 
   let last = performance.now();
   const loop = (now: number): void => {
     controls!.frame(Math.min(0.1, (now - last) / 1000));
     last = now;
     renderer.draw();
+    minimap.draw(now, canvas.width, canvas.height);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
@@ -167,9 +222,19 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
       banner.classList.remove('hidden');
     } else banner.classList.add('hidden');
   };
-  const update = (): void => {
+  /** Refreshes everything; with the update that just arrived, also plays its sounds. */
+  const update = (u?: GameUpdate): void => {
+    if (u) {
+      for (const sound of director.sounds({ events: u.events, gained: state.gained, units: state.units, buildings: u.buildings })) {
+        mixer.play(sound);
+      }
+      minimap.onUpdate(u.events, performance.now());
+    }
     units.update(state.units, performance.now());
     hud.update();
+    // a building that can no longer be afforded (or placed) ends placing mode
+    const mode = controls?.mode;
+    if (mode?.kind === 'build' && !canBuild(mode.building)) controls!.setMode({ kind: 'default' });
     diplomacy.update();
     requests.update();
     leaderboard.update();

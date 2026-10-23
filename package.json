@@ -12,7 +12,8 @@
     "e2e": "playwright test",
     "arena": "tsx scripts/arena.ts",
     "perf": "tsx scripts/perf.ts",
-    "build:world": "tsx scripts/build-world-map.ts"
+    "build:world": "tsx scripts/build-world-map.ts",
+    "build:sounds": "tsx scripts/build-sounds.ts"
   },
   "dependencies": {
     "simplex-noise": "4.0.3"

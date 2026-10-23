@@ -16,6 +16,8 @@ describe('describeEvent', () => {
     [{ type: 'bombed', by: 1, owner: 3, tile: 0 }, 'Your bombers hit Kestria'],
     [{ type: 'eliminated', nation: 3, by: 2 }, 'Varlonia wiped out Kestria'],
     [{ type: 'eliminated', nation: 1, by: 2 }, 'Varlonia wiped you out'],
+    [{ type: 'eliminated', nation: 3, by: 0 }, 'Kestria found nowhere to start and is out'],
+    [{ type: 'eliminated', nation: 1, by: 0 }, 'You found nowhere to start and are out'],
     [{ type: 'rejected', nation: 1, reason: 'not enough gold' }, 'Can’t do that: not enough gold'],
     [{ type: 'buildingCaptured', from: 1, to: 2, building: 'factory', tile: 0 }, 'Varlonia captured your factory'],
     [{ type: 'phase', phase: 'playing' }, 'The war begins!'],

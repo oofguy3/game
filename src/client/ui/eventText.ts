@@ -23,6 +23,7 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
       case 'landed':
         return 'your troops landed';
       case 'eliminated':
+        if (e.by === 0) return e.nation === me ? 'you found nowhere to start and are out' : `${n(e.nation)} found nowhere to start and is out`;
         if (e.nation === me) return `${n(e.by)} wiped you out`;
         return `${n(e.by)} wiped out ${n(e.nation)}`;
       case 'rejected':

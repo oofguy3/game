@@ -1,0 +1,31 @@
+Sound effects in this folder
+
+Recordings: Kenney (www.kenney.nl), licensed CC0 1.0 (public domain):
+  click.mp3 - Interface Sounds, click_002.ogg
+  place.mp3 - Interface Sounds, drop_002.ogg
+  built.mp3 - Interface Sounds, confirmation_001.ogg
+  thud-0.mp3 - Impact Sounds, impactSoft_medium_000.ogg
+  thud-1.mp3 - Impact Sounds, impactSoft_medium_001.ogg
+  thud-2.mp3 - Impact Sounds, impactSoft_medium_002.ogg
+  thud-3.mp3 - Impact Sounds, impactSoft_medium_003.ogg
+  thud-4.mp3 - Impact Sounds, impactSoft_medium_004.ogg
+  boom-0.mp3 - Sci-fi Sounds, lowFrequency_explosion_000.ogg
+  boom-1.mp3 - Sci-fi Sounds, lowFrequency_explosion_001.ogg
+  landing.mp3 - Impact Sounds, impactPunch_heavy_000.ogg
+  refused.mp3 - Interface Sounds, error_004.ogg
+  offer.mp3 - Interface Sounds, glass_002.ogg
+  accepted.mp3 - Interface Sounds, confirmation_002.ogg
+  lost.mp3 - Impact Sounds, impactMetal_heavy_000.ogg
+  warStart.mp3 - Impact Sounds, impactBell_heavy_000.ogg
+
+Made in code for this game (src/client/audio/synth.ts):
+  send.mp3
+  horn.mp3
+  jet.mp3
+  warning.mp3
+  radar.mp3
+  declined.mp3
+  betrayal.mp3
+  knockout.mp3
+  victory.mp3
+  defeat.mp3

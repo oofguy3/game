@@ -87,4 +87,14 @@ describe('Camera.centerOn', () => {
     expect(cam.zoom).toBe(8);
     expect(cam.tileToScreen(200, 100)).toEqual({ x: 400, y: 300 });
   });
+
+  it('lookAt puts a map point in the middle at exactly the zoom asked for, within the limits', () => {
+    const cam = new Camera(800, 600, 400, 250);
+    cam.lookAt(200, 100, 0.5);
+    expect(cam.zoom).toBe(0.5);
+    expect(cam.tileToScreen(200, 100)).toEqual({ x: 400, y: 300 });
+    cam.lookAt(10, 20, 100);
+    expect(cam.zoom).toBe(32);
+    expect(cam.tileToScreen(10, 20)).toEqual({ x: 400, y: 300 });
+  });
 });

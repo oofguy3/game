@@ -104,6 +104,17 @@ describe('answering peace, deals and joint attacks', () => {
     expect(evaluate(h, bot(h), request(h, 'peace', 2, 1))).toBe(true);
   });
 
+  it('accepts peace in a war neither side can fight over land', () => {
+    // a and b on islands across the sea: however strong a is, no land attack can reach b
+    const g = makeTestGame({
+      map: ['..............', '.###......###.', '.###......###.', '.###......###.', '..............'],
+      owners: ['..............', '.aaa......bbb.', '.aaa......bbb.', '.aaa......bbb.', '..............'],
+      nations: [{ troops: 5000 }, { troops: 300 }],
+    });
+    g.relations.set(1, 2, 'war');
+    expect(evaluate(g, bot(g), request(g, 'peace', 2, 1))).toBe(true);
+  });
+
   it('accepts a profitable deal and rejects a bad one', () => {
     const g = middle();
     const tgv = troopGoldValue(perceive(g, 1));

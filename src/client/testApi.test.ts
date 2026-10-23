@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeClientState } from './testing/fixtures';
-import { findLandTile } from './testApi';
+import { farthestTile, findLandTile } from './testApi';
 
 /** a's block on the left, b's island on the right, free land at the bottom left. */
 const MAP = [
@@ -94,5 +94,17 @@ describe('findLandTile', () => {
     // of several touching ours, the one nearest our middle
     const wide = makeClientState(['#######', '#######', '#######'], ['bbbbbbb', 'baaaaab', 'bbbbbbb']);
     expect(at(findLandTile(wide.state, wide.info, 'enemy'), 7)).toEqual([3, 0]);
+  });
+});
+
+describe('farthestTile', () => {
+  it('finds the water tile farthest from land and the land tile farthest from water', () => {
+    // a 9×5 lake on the left of a 9×5 field of land
+    const map = Array.from({ length: 5 }, () => '.........#########');
+    const { info } = makeClientState(map, map.map(() => '.'.repeat(18)));
+    expect(at(farthestTile(info, 'water'), 18)?.[0]).toBe(0);
+    expect(at(farthestTile(info, 'land'), 18)?.[0]).toBe(17);
+    const allLand = makeClientState(['###'], ['...']).info;
+    expect(farthestTile(allLand, 'water')).toBeNull();
   });
 });

@@ -1,18 +1,25 @@
-import { GAME_NAME } from '../../shared/constants';
 import type { Difficulty, MapSize } from '../../shared/types';
 import type { StartOptions } from '../../worker/protocol';
 import { h } from './dom';
+import { createLogo } from './logo';
+import { createSegmented } from './segmented';
 
-/** The start menu. Calls `onPlay` with the chosen options. */
+const SIZES = ['small', 'medium', 'large'] as const;
+const DIFFICULTIES = ['easy', 'normal', 'hard', 'insane'] as const;
+const title = (s: string): string => s[0].toUpperCase() + s.slice(1);
+
+/** The start menu on the title screen. Calls `onPlay` with the chosen options. */
 export function createMenu(onPlay: (options: StartOptions) => void, debug: boolean): HTMLElement {
   const field = (label: string, control: HTMLElement, id: string): HTMLElement => {
     control.id = id;
     return h('div', { class: 'field' }, h('label', { text: label, attrs: { for: id } }), control);
   };
-  const map = h('select', {}, h('option', { text: 'World', attrs: { value: 'world' } }), h('option', { text: 'Random', attrs: { value: 'random' } }));
-  const size = h('select', {}, ...(['small', 'medium', 'large'] as const).map((s) =>
-    h('option', { text: s[0].toUpperCase() + s.slice(1), attrs: { value: s } })));
-  size.value = 'medium';
+  /** A labelled group of choice buttons (the buttons carry the group's name for screen readers). */
+  const group = (label: string, control: HTMLElement): HTMLElement =>
+    h('div', { class: 'field' }, h('div', { class: 'field-label', text: label }), control);
+
+  const map = createSegmented('Map', [{ value: 'world', text: 'World' }, { value: 'random', text: 'Random' }], 'world');
+  const size = createSegmented<MapSize>('Size', SIZES.map((s) => ({ value: s, text: title(s) })), 'medium');
   const seed = h('input', { attrs: { type: 'number', min: '1', step: '1' } });
   seed.value = String(1 + Math.floor(Math.random() * 999_999));
   const bots = h('input', { attrs: { type: 'number', min: '4', max: '40', step: '1' } });
@@ -21,26 +28,24 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
   botsRange.value = '12';
   botsRange.addEventListener('input', () => { bots.value = botsRange.value; });
   bots.addEventListener('input', () => { botsRange.value = bots.value; });
-  const difficulty = h('select', {}, ...(['easy', 'normal', 'hard', 'insane'] as const).map((d) =>
-    h('option', { text: d[0].toUpperCase() + d.slice(1), attrs: { value: d } })));
-  difficulty.value = 'normal';
+  const difficulty = createSegmented<Difficulty>('Difficulty', DIFFICULTIES.map((d) => ({ value: d, text: title(d) })), 'normal');
   const name = h('input', { attrs: { type: 'text', maxlength: '20' } });
   name.value = 'You';
-  const randomOnly = h('div', { class: 'random-only' }, field('Size', size, 'menu-size'), field('Seed', seed, 'menu-seed'));
+  const randomOnly = h('div', { class: 'random-only' }, group('Size', size.el), field('Seed', seed, 'menu-seed'));
   const sync = (): void => {
     randomOnly.classList.toggle('hidden', map.value !== 'random');
   };
-  map.addEventListener('change', sync);
+  map.onChange = sync;
   sync();
 
-  const play = h('button', { class: 'primary play', text: 'Play' });
+  const play = h('button', { class: 'primary play', text: 'Play', attrs: { type: 'submit' } });
   const form = h('form', { class: 'menu-card' },
-    h('h1', { text: GAME_NAME }),
+    createLogo('large'),
     h('p', { class: 'tagline', text: 'Spread across the map, build up, and take over the world.' }),
-    field('Map', map, 'menu-map'),
+    group('Map', map.el),
     randomOnly,
     h('div', { class: 'field' }, h('label', { text: 'Bots', attrs: { for: 'menu-bots' } }), h('div', { class: 'bots' }, botsRange, bots)),
-    field('Difficulty', difficulty, 'menu-difficulty'),
+    group('Difficulty', difficulty.el),
     field('Your name', name, 'menu-name'),
     play);
   bots.id = 'menu-bots';
@@ -49,9 +54,9 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
     const count = Math.min(40, Math.max(4, Math.round(Number(bots.value) || 12)));
     const seedValue = Math.max(1, Math.round(Number(seed.value) || 1));
     onPlay({
-      map: map.value === 'world' ? { kind: 'world' } : { kind: 'random', size: size.value as MapSize, seed: seedValue },
+      map: map.value === 'world' ? { kind: 'world' } : { kind: 'random', size: size.value, seed: seedValue },
       bots: count,
-      difficulty: difficulty.value as Difficulty,
+      difficulty: difficulty.value,
       seed: seedValue,
       playerName: name.value.trim() || 'You',
       debug,

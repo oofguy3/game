@@ -3,7 +3,6 @@ import type {
   TileIndex, UnitType,
 } from '../shared/types';
 import type { Nation } from '../sim/core/nation';
-import type { Speed } from './scheduler';
 
 /** How the player set up the match on the menu. */
 export interface StartOptions {
@@ -18,12 +17,19 @@ export interface StartOptions {
 export type ToWorker =
   | { type: 'start'; options: StartOptions; worldMap?: ArrayBuffer }
   | { type: 'command'; command: Command }
-  | { type: 'speed'; speed: Speed };
+  | { type: 'pause'; paused: boolean };
 
 export type FromWorker =
   | { type: 'init'; init: InitPayload }
   | { type: 'update'; update: GameUpdate }
   | { type: 'error'; message: string };
+
+/** How the page should dress the map: the latitudes of its top and bottom rows, a seed, and dry subtropical bands. */
+export interface LookOptions {
+  latitude: { top: number; bottom: number };
+  seed: number;
+  dryBands: boolean;
+}
 
 /** Everything that doesn't change during a match, sent once. */
 export interface InitPayload {
@@ -33,6 +39,7 @@ export interface InitPayload {
   playerId: NationId;
   nations: { id: NationId; name: string; color: number; isPlayer: boolean }[];
   spawnEndsAt: number;
+  look: LookOptions;
 }
 
 export interface NationSnap {
@@ -48,6 +55,8 @@ export interface NationSnap {
   relationToPlayer: Relation;
   /** Whether trade between the player and this nation is switched off, by either side. */
   embargoed: boolean;
+  /** Living nations allied with this one, in id order; none once it is eliminated. */
+  allies: NationId[];
   /** Troops in this nation's attacks on the player. */
   attackingPlayer: number;
   /** Where to write the nation's name, in tile coordinates, and how big; null without land. */
@@ -87,4 +96,6 @@ export interface GameUpdate {
   /** Pending requests addressed to the player. */
   requests: DiplomacyRequest[];
   result: GameResult | null;
+  /** Running attacks between two nations as [attacker, target], each pair once, sorted. */
+  fronts: [NationId, NationId][];
 }

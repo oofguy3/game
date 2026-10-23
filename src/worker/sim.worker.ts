@@ -2,7 +2,7 @@ import { CONFIG } from '../shared/config';
 import { generateRandomMap } from '../sim/map/randomMap';
 import { decodeWorldMap } from '../sim/map/worldMap';
 import { Match } from '../sim/match';
-import { buildInit, buildUpdate } from '../sim/snapshot';
+import { buildInit, buildUpdate, lookOptions } from '../sim/snapshot';
 import type { FromWorker, StartOptions, ToWorker } from './protocol';
 import { TickScheduler } from './scheduler';
 
@@ -26,7 +26,7 @@ ctx.onmessage = (e) => {
   try {
     if (msg.type === 'start') start(msg.options, msg.worldMap);
     else if (msg.type === 'command') match?.queuePlayer(msg.command);
-    else if (msg.type === 'speed') scheduler.setSpeed(msg.speed);
+    else if (msg.type === 'pause') scheduler.setPaused(msg.paused);
   } catch (err) {
     fail(err);
   }
@@ -45,7 +45,7 @@ function start(options: StartOptions, worldMap?: ArrayBuffer): void {
     bots: Array.from({ length: bots }, () => ({ difficulty: options.difficulty })),
     debug: options.debug,
   });
-  const init = buildInit(match);
+  const init = buildInit(match, lookOptions(options.map));
   ctx.postMessage({ type: 'init', init }, [init.terrain.buffer]);
   sendUpdate(match);
   timer = setInterval(frame, FRAME_MS);

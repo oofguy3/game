@@ -1,14 +1,17 @@
 import { CONFIG } from '../shared/config';
-import type { NationId, Relation, TileIndex } from '../shared/types';
-import type { BuildingSnap, GameUpdate, InitPayload, NationSnap } from '../worker/protocol';
+import type { MapChoice, NationId, Relation, TileIndex } from '../shared/types';
+import type { BuildingSnap, GameUpdate, InitPayload, LookOptions, NationSnap } from '../worker/protocol';
 import type { Game } from './core/game';
 import { inBounds, tileOf } from './map/grid';
+import { WORLD_PROJECTION } from './map/worldMap';
 import type { Match } from './match';
 import { goldIncome, maxTroops } from './systems/economy';
 
 /** How far from a nation's centroid (in tiles) its label may move to sit on its own land. */
 const LABEL_SEARCH = 30;
 const LABEL_SCALE = 0.6;
+/** Random maps pretend to span these latitudes north and south, so snow gathers near the top and bottom edges. */
+const RANDOM_MAP_LATITUDE = 72;
 
 type Label = NationSnap['label'];
 
@@ -20,8 +23,19 @@ interface SnapshotState {
 }
 const states = new WeakMap<Match, SnapshotState>();
 
-/** The match's fixed facts: the map (a copy of its terrain, safe to transfer) and who's playing. */
-export function buildInit(match: Match): InitPayload {
+/**
+ * How the page dresses a map: the world map spans its projection's latitudes with dry subtropical bands and a fixed
+ * seed; a random map spans ±RANDOM_MAP_LATITUDE and uses its own seed.
+ */
+export function lookOptions(choice: MapChoice): LookOptions {
+  if (choice.kind === 'world') {
+    return { latitude: { top: WORLD_PROJECTION.latMax, bottom: WORLD_PROJECTION.latMin }, seed: 1, dryBands: true };
+  }
+  return { latitude: { top: RANDOM_MAP_LATITUDE, bottom: -RANDOM_MAP_LATITUDE }, seed: choice.seed, dryBands: false };
+}
+
+/** The match's fixed facts: the map (a copy of its terrain, safe to transfer), who's playing, and how to dress it. */
+export function buildInit(match: Match, look: LookOptions): InitPayload {
   const { game } = match;
   return {
     width: game.map.width,
@@ -30,6 +44,7 @@ export function buildInit(match: Match): InitPayload {
     playerId: game.playerId,
     nations: game.nations.slice(1).map((n) => ({ id: n.id, name: n.name, color: n.color, isPlayer: n.isPlayer })),
     spawnEndsAt: game.spawnEndsAt,
+    look,
   };
 }
 
@@ -81,6 +96,7 @@ export function buildUpdate(match: Match): GameUpdate {
       spawned: n.spawned,
       relationToPlayer: relationToPlayer(game, n.id),
       embargoed: player !== 0 && n.id !== player && game.relations.embargoed(player, n.id),
+      allies: n.alive ? alliesOf(game, n.id) : [],
       attackingPlayer: attackingPlayer(game, n.id),
       label: state.labels[n.id] ?? null,
       stats: { ...n.stats },
@@ -90,7 +106,22 @@ export function buildUpdate(match: Match): GameUpdate {
     events: game.drainEvents(),
     requests: player === 0 ? [] : [...game.requests.values()].filter((r) => r.to === player),
     result: game.result,
+    fronts: frontsOf(game),
   };
+}
+
+/** The running attacks between two nations as [attacker, target], each pair once, sorted. */
+function frontsOf(game: Game): [NationId, NationId][] {
+  const seen = new Set<number>();
+  const out: [NationId, NationId][] = [];
+  for (const a of game.attacks) {
+    if (a.target === 0) continue;
+    const key = a.attacker * game.nations.length + a.target;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([a.attacker, a.target]);
+  }
+  return out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
 }
 
 function uniqueTiles(tiles: TileIndex[]): TileIndex[] {
@@ -100,6 +131,14 @@ function uniqueTiles(tiles: TileIndex[]): TileIndex[] {
     if (seen.has(t)) continue;
     seen.add(t);
     out.push(t);
+  }
+  return out;
+}
+
+function alliesOf(game: Game, id: NationId): NationId[] {
+  const out: NationId[] = [];
+  for (const m of game.nations) {
+    if (m.id !== 0 && m.id !== id && m.alive && game.relations.get(id, m.id) === 'allied') out.push(m.id);
   }
   return out;
 }

@@ -78,7 +78,7 @@ export class RequestPopups {
       let entry = this.cards.get(r.id);
       if (!entry) {
         const timer = h('span', { class: 'request-timer' });
-        const card = h('div', { class: 'request panel' },
+        const card = h('div', { class: 'request panel enter' },
           h('div', { class: 'request-text', text: describeRequest(r, this.names) }),
           h('div', { class: 'request-buttons' },
             h('button', { class: 'primary', text: 'Accept', on: { click: () => this.answer(r.id, true) } }),

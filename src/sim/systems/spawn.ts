@@ -49,14 +49,16 @@ export function randomSpawnTile(game: Game, rng: Rng, spacing: number = game.spa
 
 /**
  * Ends the spawn phase: every living nation that has not spawned gets a random start, in id order, from `game.rng`.
- * A nation with no land left to start on is eliminated. Then the game moves on to the playing phase.
+ * A nation with no land left to start on is eliminated (by no one: `by` 0). Then the game moves on to the playing phase.
  */
 export function endSpawnPhase(game: Game): void {
   for (const nation of game.nations) {
     if (!nation.alive || nation.spawned) continue;
     const tile = randomSpawnTile(game, game.rng);
-    if (tile === null) nation.alive = false;
-    else placeSpawn(game, nation, tile);
+    if (tile === null) {
+      nation.alive = false;
+      game.emit({ type: 'eliminated', nation: nation.id, by: 0 });
+    } else placeSpawn(game, nation, tile);
   }
   game.phase = 'playing';
   game.emit({ type: 'phase', phase: 'playing' });

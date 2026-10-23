@@ -24,3 +24,10 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
 export function setText(el: HTMLElement, text: string): void {
   if (el.textContent !== text) el.textContent = text;
 }
+
+/** Shows a hidden panel and replays its slide-in (the `enter` class). */
+export function showPanel(el: HTMLElement): void {
+  el.classList.remove('hidden', 'enter');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('enter');
+}

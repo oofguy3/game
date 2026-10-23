@@ -6,7 +6,7 @@ import { ClientState } from '../state';
 export function nationSnap(id: number, over: Partial<NationSnap> = {}): NationSnap {
   return {
     id, troops: 1000, maxTroops: 5000, gold: 1000, income: 1, tiles: 0, alive: true, spawned: true,
-    relationToPlayer: 'neutral', embargoed: false, attackingPlayer: 0, label: null,
+    relationToPlayer: 'neutral', embargoed: false, allies: [], attackingPlayer: 0, label: null,
     stats: { peakTiles: 0, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 }, ...over,
   };
 }
@@ -33,7 +33,7 @@ export function makeClientState(map: string[], owners: string[], nations: Partia
   }
   const state = new ClientState();
   state.applyInit({
-    width, height, terrain, playerId: 1, spawnEndsAt: 0,
+    width, height, terrain, playerId: 1, spawnEndsAt: 0, look: { latitude: { top: 72, bottom: -72 }, seed: 1, dryBands: false },
     nations: Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `N${i + 1}`, color: 0x808080, isPlayer: i === 0 })),
   });
   state.owner.set(owner);

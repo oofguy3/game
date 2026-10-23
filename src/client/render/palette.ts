@@ -1,11 +1,12 @@
 import { Terrain } from '../../shared/types';
+import { LOOK } from './look/palette';
 
-/** Muted flat colours for land nobody owns and for water, so nation colours stand out. */
+/** Flat colours for land nobody owns and for water, from the natural palette (the flat look and the minimap). */
 export const TERRAIN_COLORS: Record<Terrain, number> = {
-  [Terrain.Water]: 0x2d5a7b,
-  [Terrain.Plains]: 0xcfc8a4,
-  [Terrain.Hills]: 0xb3aa86,
-  [Terrain.Mountains]: 0x8f877a,
+  [Terrain.Water]: LOOK.water,
+  [Terrain.Plains]: LOOK.plains,
+  [Terrain.Hills]: LOOK.hills,
+  [Terrain.Mountains]: LOOK.mountains,
 };
 
 /** Shade factor for tiles on a nation's border. */

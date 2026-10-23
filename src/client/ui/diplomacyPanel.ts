@@ -2,7 +2,7 @@ import type { Command, Deal, NationId, Relation } from '../../shared/types';
 import { formatNumber } from '../format';
 import { css } from '../render/palette';
 import type { ClientState } from '../state';
-import { h, setText } from './dom';
+import { h, setText, showPanel } from './dom';
 
 const RELATION_LABELS: Record<Relation, string> = { neutral: 'Neutral', allied: 'Allied', war: 'At war' };
 const DEAL_FIELDS: { key: keyof Deal; label: string }[] = [
@@ -34,11 +34,16 @@ export function dealFromForm(values: Record<keyof Deal, string>, gift = false): 
   };
 }
 
-/** Living nations, besides the player and `ally`, the player could ask `ally` to attack, in id order. */
+/**
+ * Living nations, besides the player and `ally`, the player could ask `ally` to attack — allied neither with the player
+ * nor with `ally` — in id order.
+ */
 export function jointTargets(state: ClientState, ally: NationId): NationId[] {
+  const theirs = state.nations.get(ally)?.allies ?? [];
   const out: NationId[] = [];
   for (const n of state.nations.values()) {
     if (n.id === state.init.playerId || n.id === ally || !n.alive || n.relationToPlayer === 'allied') continue;
+    if (theirs.includes(n.id)) continue;
     out.push(n.id);
   }
   return out.sort((a, b) => a - b);
@@ -91,7 +96,7 @@ export class DiplomacyPanel {
   open(id: NationId): void {
     this.nation = id;
     this.shownKey = '';
-    this.el.classList.remove('hidden');
+    showPanel(this.el);
     this.update();
   }
 

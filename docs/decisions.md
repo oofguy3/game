@@ -127,10 +127,43 @@ None of these breaks normal play; each is a polish item or an edge case.
 - Task 10: build command doesn't validate building type at runtime (non-type key → NaN gold / throw) — typed callers only today; fix with applyCommand default-arm pass
 - Task 10: hot-path allocations in defenseMultiplier/buildingCost/stepBuildings (Task 28 perf); SHORE tests assume minSpacing ≤ 4; BuildingStore.remove mutates before detach can throw
 - Task 11: Rng salts spread over 3 files (collision only guarded by comments); DIFFICULTY/PERSONALITY mutable objects shared by reference
-- Final: "Move nearest warship here" picks the nearest warship on any sea; one on another water body is rejected 'different sea' though another could go
-- Final: build mode survives its HUD button becoming unaffordable (banner stays; next click rejected 'not enough gold')
-- Final: bots never accept peace with an overseas enemy neither side can reach by land (both estimates 0 → ours < theirs false)
 - Final: Math.hypot remains in naval.ts, units.ts, air.ts, ai/naval.ts, ai/economy.ts (engine-approximated; replays may differ between Node and a browser)
-- Final: the Ask-to-attack list can offer a target allied with the chosen ally (the sim rejects it readably)
 - Final: "Keep watching" on the defeat screen has no automated test
-- Final: a nation left landless when the spawn phase ends is marked dead without an 'eliminated' event
+
+## Fixed since the first release
+
+- One game speed: a single Pause/Resume button replaced the 1× / 2× / 4× buttons (Space still pauses).
+- "Move nearest warship here" picks the nearest warship on any sea; one on another water body is rejected 'different sea' though another could go
+- build mode survives its HUD button becoming unaffordable (banner stays; next click rejected 'not enough gold')
+- bots never accept peace with an overseas enemy neither side can reach by land (both estimates 0 → ours < theirs false)
+- the Ask-to-attack list can offer a target allied with the chosen ally (the sim rejects it readably)
+- a nation left landless when the spawn phase ends is marked dead without an 'eliminated' event
+
+## Step B: the new look and sound ("Borderline")
+
+Design: `docs/superpowers/specs/2026-10-23-looks-and-sounds-design.md`. Plan: `docs/superpowers/plans/2026-10-23-looks-and-sounds.md`.
+
+**Decisions in the design** (made without asking, each with its cost if wrong)
+- Some sounds are made in code: the whoosh, jet, horn, two-tone warning, radar ping, betrayal sting, low "declined" tone and the three tunes. The packs either lack them or don't say which tunes are happy. — If wrong: the tunes sound plainer than recordings; easy to swap.
+- Coasts get no border line or glow; only borders where land changes owner (empty land included). — If wrong: coastal nations look a little less outlined.
+- The title screen's backdrop is the real world map with made-up nations. — If wrong: nothing to play.
+- The minimap uses the flat picture, not the graphics-chip look. — If wrong: the minimap looks simpler than the big map.
+- A lost WebGL context switches to the flat look for the rest of the match. — If wrong: rare; the game keeps working.
+- `?look=flat` stays for tests and comparisons. — If wrong: none.
+- A browser that only emulates the graphics chip (it refuses a context that must be fast) gets the flat look, which runs at 60 frames a second where the emulated map ran at about 20; `?look=gl` forces the graphics chip, and the browser tests use it. — If wrong: a machine whose real graphics chip the browser reports as slow gets the flat look.
+- Front lines show only between two nations; spreading into empty land doesn't count. — If wrong: less movement in the early game.
+
+**Rulings while building**
+- The "no forest near the coast" test allows for the one-byte coast encoding (±0.03 of a tile). — If wrong: none.
+- The territory field recomputes only the part of each 32×32 block near the changed tiles, with a 4-tile margin. Whole blocks measured 2.5 ms per update against a 2 ms budget; now 0.42 ms, and a test checks it always equals a full recompute. — If wrong: a stale glow somewhere; the test guards it.
+- Visual tuning from screenshots:
+  - coastlines are smoothed once without letting any tile change sides;
+  - mountains get ridges, with snow only on the ridge tops, and the polar snow line wobbles;
+  - forest and snow are crisp patches;
+  - the nation tint uses a lighter version of the colour, since a blue nation over forest read as sea;
+  - the capture shimmer blends between tiles, front lines are a warm, pulsing 4 px line with a glow, and the water outside the map moves like the rest.
+  — If wrong: purely cosmetic.
+- The news feed and the minimap follow the bottom bar's height, now that the build buttons have icons. — If wrong: none.
+- "Keep watching" after a defeat brings the colour back. — If wrong: none.
+- The sound files come from three Kenney packs; the jingles pack isn't needed. The alarm and the "declined" tone were turned down, and the land-gain thud plays softly, after measuring every file's loudness. — If wrong: some sounds a little quieter than intended.
+- Small test-API changes (`findInlandTile`, `dispose()` in place of `debugLoseContext()`, one hooks object for `installTestApi`). — If wrong: none.

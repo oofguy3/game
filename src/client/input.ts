@@ -21,6 +21,8 @@ export interface ControlActions {
   openMenu(tile: number, x: number, y: number): void;
   /** Closes the right-click menu; whether it was open. */
   dismissMenu(): boolean;
+  /** Shows or hides the minimap. */
+  toggleMinimap(): void;
 }
 
 /** A drag shorter than this many pixels is a click. */
@@ -141,6 +143,7 @@ export class Controls {
       e.preventDefault();
       this.actions.togglePause();
     } else if (key === 'escape') this.setMode({ kind: 'default' });
+    else if (key === 'm') this.actions.toggleMinimap();
     else if (key === '[') this.actions.nudgeRatio(-10);
     else if (key === ']') this.actions.nudgeRatio(10);
     else {

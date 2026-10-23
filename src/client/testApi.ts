@@ -1,8 +1,13 @@
 import { CONFIG } from '../shared/config';
-import type { Command, NationId, TileIndex } from '../shared/types';
+import type { Command, GameResult, NationId, TileIndex } from '../shared/types';
+import type { SoundName } from './audio/catalog';
+import type { Mixer } from './audio/mixer';
+import type { WebAudioOutput } from './audio/webAudio';
 import type { Camera } from './camera';
 import type { MapInfo } from './mapInfo';
+import type { Renderer } from './render/renderer';
 import type { ClientState } from './state';
+import type { Minimap } from './ui/minimap';
 
 export type FindKind = 'unowned' | 'player' | 'enemy' | 'coastal-unowned' | 'player-interior' | 'player-coastal'
   | 'overseas-enemy' | 'bomb-target';
@@ -17,6 +22,45 @@ export interface TestApi {
   send(cmd: Command): void;
   /** Gives the player gold and troops (a debug command; the match must run with ?test=1). */
   grant(amounts: { gold?: number; troops?: number }): void;
+  /** Whether the map is drawn by the graphics chip or as the flat picture. */
+  look(): 'gl' | 'flat';
+  /** The map's colour at the middle of `tile`, without buildings, units or labels on top. */
+  sampleMap(tile: number): [number, number, number];
+  /** The mean draw time of the recent frames, in ms, and how many frames that covers. */
+  frameStats(): { mean: number; frames: number };
+  /** Puts `tile` in the middle of the screen at exactly `zoom` (within the camera's limits). */
+  zoomTo(zoom: number, tile: number): void;
+  /** The water tile farthest from land. */
+  findWaterTile(): number | null;
+  /** The land tile farthest from water. */
+  findInlandTile(): number | null;
+  /** Throws the map's graphics context away, as a lost graphics chip would. */
+  loseContext(): void;
+  /** Ends the match on the page as if the simulation had (only for testing the end screens). */
+  forceResult(result: GameResult): void;
+  /** How grey the map is, 0 to 1. */
+  grey(): number;
+  /** The sound system: the audio context's state, the settings, and the latest sounds played. */
+  sound(): { state: string; muted: boolean; volume: number; played: SoundName[] };
+  /** Where the camera is: its top-left map position in tiles and its zoom. */
+  camera(): { x: number; y: number; zoom: number };
+  /** Whether the minimap shows, and how many flashes it has. */
+  minimap(): { visible: boolean; flashes: number };
+}
+
+/** What the test API reaches into. */
+export interface TestHooks {
+  state: ClientState;
+  info: MapInfo;
+  camera: Camera;
+  canvas: HTMLCanvasElement;
+  send: (cmd: Command) => void;
+  renderer: Renderer;
+  /** Refreshes the page's panels from the state. */
+  refresh: () => void;
+  mixer: Mixer;
+  output: WebAudioOutput;
+  minimap: Minimap;
 }
 
 declare global {
@@ -33,9 +77,7 @@ const MAX_DEPTH = 12;
 const DISTANCE_SAMPLES = 600;
 
 /** Exposes hooks for the browser tests on `window.__test` (only with ?test=1). */
-export function installTestApi(
-  state: ClientState, info: MapInfo, camera: Camera, canvas: HTMLCanvasElement, send: (cmd: Command) => void,
-): void {
+export function installTestApi({ state, info, camera, canvas, send, renderer, refresh, mixer, output, minimap }: TestHooks): void {
   const toPage = (tile: number): { x: number; y: number } => {
     const w = state.init.width;
     const p = camera.tileToScreen((tile % w) + 0.5, Math.floor(tile / w) + 0.5);
@@ -53,7 +95,58 @@ export function installTestApi(
     findLandTile: (kind) => findLandTile(state, info, kind),
     send,
     grant: ({ gold, troops }) => send({ type: 'debugGrant', nation: state.init.playerId, gold, troops }),
+    look: () => renderer.look,
+    sampleMap(tile) {
+      const w = state.init.width;
+      const p = camera.tileToScreen((tile % w) + 0.5, Math.floor(tile / w) + 0.5);
+      return renderer.sample(p.x, p.y);
+    },
+    frameStats() {
+      const frames = renderer.frameMs;
+      return { mean: frames.reduce((s, t) => s + t, 0) / Math.max(1, frames.length), frames: frames.length };
+    },
+    zoomTo(zoom, tile) {
+      const w = state.init.width;
+      camera.lookAt((tile % w) + 0.5, Math.floor(tile / w) + 0.5, zoom);
+    },
+    findWaterTile: () => farthestTile(info, 'water'),
+    findInlandTile: () => farthestTile(info, 'land'),
+    loseContext: () => renderer.debugLoseContext(),
+    forceResult(result) {
+      state.result = result;
+      refresh();
+    },
+    grey: () => renderer.grey,
+    sound: () => ({ state: output.state, ...mixer.settings, played: [...mixer.played] }),
+    camera: () => ({ x: camera.x, y: camera.y, zoom: camera.zoom }),
+    minimap: () => ({ visible: minimap.visible, flashes: minimap.flashCount }),
   };
+}
+
+/** The tile of `kind` farthest (in 4-neighbour steps) from every tile of the other kind; null when there is none. */
+export function farthestTile(info: MapInfo, kind: 'water' | 'land'): TileIndex | null {
+  const n = info.width * info.height;
+  const mine = (t: TileIndex): boolean => info.isLand(t) === (kind === 'land');
+  const dist = new Int32Array(n).fill(-1);
+  const queue: TileIndex[] = [];
+  for (let t = 0; t < n; t++) {
+    if (mine(t)) continue;
+    dist[t] = 0;
+    queue.push(t);
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const t = queue[i];
+    for (const m of info.neighbors(t)) {
+      if (dist[m] !== -1) continue;
+      dist[m] = dist[t] + 1;
+      queue.push(m);
+    }
+  }
+  let best: TileIndex | null = null;
+  for (let t = 0; t < n; t++) {
+    if (mine(t) && (best === null || dist[t] > dist[best] || (dist[best] !== -1 && dist[t] === -1))) best = t;
+  }
+  return best;
 }
 
 /**

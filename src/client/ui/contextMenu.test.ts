@@ -125,6 +125,27 @@ describe('context menu entries', () => {
     expect(entry(es, 'Paratroopers')).toMatchObject({ disabled: true, detail: 'not land' });
   });
 
+  it('only orders a warship on the same sea as the click', () => {
+    // a's land holds a lake (x 2–4, y 2–3), cut off from the sea around it
+    const map = ['....................', '.#######............', '.#...###............', '.#...###............', '.#######............', '....................', '....................'];
+    const owners = ['....................', '.aaaaaaa............', '.a...aaa............', '.a...aaa............', '.aaaaaaa............', '....................', '....................'];
+    const { state, info } = makeClientState(map, owners);
+    const sent: Command[] = [];
+    const ctx = { state, info, send: (c: Command) => sent.push(c), ratio: () => 0.3, openDiplomacy: () => {} };
+    const lake = { id: 31, type: 'warship' as const, owner: 1, x: 3, y: 2, troops: 0 };
+    const sea = { id: 32, type: 'warship' as const, owner: 1, x: 14, y: 6, troops: 0 };
+    // the lake ship is nearer, but only the sea ship can sail to the sea
+    state.units = [lake, sea];
+    entry(menuEntries(ctx, tile(8, 2)), 'Move')!.run!();
+    expect(sent).toEqual([{ type: 'moveUnit', nation: 1, unitId: 32, tile: tile(8, 2) }]);
+    // and on the lake, the lake ship
+    entry(menuEntries(ctx, tile(4, 3)), 'Move')!.run!();
+    expect(sent[1]).toEqual({ type: 'moveUnit', nation: 1, unitId: 31, tile: tile(4, 3) });
+    // no warship on this sea: greyed out, saying why
+    state.units = [lake];
+    expect(entry(menuEntries(ctx, tile(8, 2)), 'Move')).toMatchObject({ disabled: true, detail: 'none on this sea' });
+  });
+
   it('nothing while choosing a start', () => {
     const s = setup();
     s.state.phase = 'spawn';

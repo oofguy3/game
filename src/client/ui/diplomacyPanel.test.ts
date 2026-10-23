@@ -22,5 +22,8 @@ describe('diplomacy panel', () => {
     state.nations.get(4)!.relationToPlayer = 'allied';
     state.nations.get(5)!.alive = false;
     expect(jointTargets(state, 2)).toEqual([3]);
+    // nor a nation the ally is allied with itself
+    state.nations.get(2)!.allies = [3];
+    expect(jointTargets(state, 2)).toEqual([]);
   });
 });
