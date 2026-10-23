@@ -7,7 +7,7 @@ export const LOGO_RED = '#ef4444';
 /** The jagged north–south border that splits the globe, top to bottom. */
 const BORDER = '50,0 44,12 55,24 45,36 56,48 44,60 55,72 46,84 52,100';
 const LEFT = `0,0 ${BORDER} 0,100`;
-const RIGHT = `${BORDER.split(' ').reverse().join(' ')} 100,100 100,0`;
+const RIGHT = `${BORDER} 100,100 100,0`;
 /** Lighter land shapes on both halves, so the badge reads as a globe of territories. */
 const CONTINENTS = [
   'M18 30C26 22 38 26 40 34C42 42 34 46 30 54C26 62 16 58 14 48C12 40 12 36 18 30Z',
