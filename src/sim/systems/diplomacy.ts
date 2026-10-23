@@ -3,6 +3,7 @@ import type { Deal, DiplomacyRequest, NationId } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
 import { cancelAttacksBetween } from './attacks';
+import { removeUnit } from './units';
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 
@@ -37,8 +38,9 @@ export function createRequest(
 }
 
 /**
- * `nation` answers request `requestId`, which must be addressed to it. An accepted alliance makes the pair allies and
- * ends every attack between them; accepted peace ends their war the same way (if they are still at war); an accepted
+ * `nation` answers request `requestId`, which must be addressed to it. An accepted alliance makes the pair allies,
+ * ends every attack between them and calls back the boats and planes on their way; accepted peace ends their war the
+ * same way (if they are still at war); an accepted
  * deal changes hands if both sides can still pay, else it resolves as not accepted. The request is resolved either way.
  */
 export function respond(game: Game, nation: NationId, requestId: number, accept: boolean): CommandResult {
@@ -113,12 +115,35 @@ export function requestJointAttack(game: Game, from: NationId, to: NationId, tar
   return createRequest(game, 'jointAttack', from, to, { target });
 }
 
-/** Sets the pair's relation, ends the attacks between them and emits `relation` if it changed. */
+/** Sets the pair's relation, ends the attacks between them, calls off what is in flight and emits `relation` if it changed. */
 function makeRelation(game: Game, a: NationId, b: NationId, relation: 'allied' | 'neutral'): void {
   cancelAttacksBetween(game, a, b);
+  recallUnits(game, a, b);
   if (game.relations.get(a, b) === relation) return;
   game.relations.set(a, b, relation);
   game.emit({ type: 'relation', a, b, relation });
+}
+
+/**
+ * Calls off what `a` and `b` have on the way to each other's land: troop boats and paratroop planes turn back (their
+ * troops rejoin their owner's pool) and bombers fly home without dropping anything.
+ */
+function recallUnits(game: Game, a: NationId, b: NationId): void {
+  for (const u of [...game.units.values()]) {
+    const other = u.owner === a ? b : u.owner === b ? a : 0;
+    if (other === 0 || u.targetTile < 0 || game.owner[u.targetTile] !== other) continue;
+    if (u.type === 'troopBoat' || u.type === 'paraPlane') {
+      removeUnit(game, u.id, 0);
+      game.nations[u.owner].troops += u.troops;
+    } else if (u.type === 'bomber' && u.mission !== 'returning') {
+      const home = u.homeId === null ? undefined : game.buildings.byId.get(u.homeId);
+      if (home && home.owner === u.owner && home.type === 'airport') {
+        u.mission = 'returning';
+        u.path = [home.tile];
+        u.pathIndex = 0;
+      } else removeUnit(game, u.id, 0);
+    }
+  }
 }
 
 function resolve(game: Game, request: DiplomacyRequest, accepted: boolean): void {

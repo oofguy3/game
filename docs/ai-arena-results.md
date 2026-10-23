@@ -8,22 +8,22 @@ its troop cap (troops there barely grow).
 Target: each harder difficulty wins at least 70% of its matches on both runs, and insane bots spend under 10% of their
 time at max.
 
-## Final (2026-10-23)
+## Final (2026-10-23, after the final review's fixes)
 
 `npm run arena -- --seeds 20 --size small`
 
 | Pairing | Wins | Losses | Draws | Win rate | At max (harder / easier) |
 |---|---|---|---|---|---|
-| insane vs hard | 18 | 2 | 0 | **90%** | 2% / 2% |
-| hard vs normal | 19 | 1 | 0 | **95%** | 4% / 6% |
+| insane vs hard | 18 | 2 | 0 | **90%** | 3% / 2% |
+| hard vs normal | 19 | 1 | 0 | **95%** | 5% / 6% |
 | normal vs easy | 20 | 0 | 0 | **100%** | 35% / 14% |
 
 `npm run arena -- --seeds 10 --size medium`
 
 | Pairing | Wins | Losses | Draws | Win rate | At max (harder / easier) |
 |---|---|---|---|---|---|
-| insane vs hard | 9 | 1 | 0 | **90%** | 7% / 4% |
-| hard vs normal | 9 | 1 | 0 | **90%** | 9% / 13% |
+| insane vs hard | 10 | 0 | 0 | **100%** | 6% / 4% |
+| hard vs normal | 9 | 1 | 0 | **90%** | 8% / 12% |
 | normal vs easy | 10 | 0 | 0 | **100%** | 38% / 18% |
 
 Ten more medium seeds (11–20) during tuning gave 90% / 100% / 100%.

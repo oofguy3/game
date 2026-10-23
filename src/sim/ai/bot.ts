@@ -6,7 +6,7 @@ import { Rng } from '../util/rng';
 import { chooseParadrop, manageAirDefense, planCombinedArms } from './air';
 import { considerBetrayal, evaluateRequest, proposeDiplomacy } from './diplomacy';
 import { chooseBuild } from './economy';
-import { chooseAttacks } from './military';
+import { chooseAttacks, frontierTile } from './military';
 import { chooseInvasion, manageWarships } from './naval';
 import { perceive } from './perception';
 import { DIFFICULTY, PERSONALITY } from './profile';
@@ -121,10 +121,12 @@ export class Bot {
         this.memory.pendingAttack = null;
       } else {
         held = pending.target;
-        const attack: Command = { type: 'attack', nation: me, tile: pending.tile, ratio: pending.ratio };
         if (game.tick >= pending.at) {
           this.memory.pendingAttack = null;
-          if (allowed(attack)) {
+          // aimed at the front as it is now: the tile picked before the bombs may have changed hands since
+          const tile = frontierTile(game, me, pending.target);
+          const attack: Command | null = tile === null ? null : { type: 'attack', nation: me, tile, ratio: pending.ratio };
+          if (attack && allowed(attack)) {
             issue(attack);
             spent += pending.ratio * p.troops;
           }

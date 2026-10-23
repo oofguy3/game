@@ -148,3 +148,41 @@ describe('troop boats', () => {
     expect(boats(g)).toEqual([]);
   });
 });
+
+describe('clicking land across the water', () => {
+  /** a's island on the left; on the right, c's island with b's land inside it (ringed by c's coast unless `bCoast`). */
+  function across(bCoast: boolean): Game {
+    const map = ['..............', '.##.....#####.', '.##.....#####.', '.##.....#####.', '..............'];
+    const owners = ['..............', bCoast ? '.aa.....cbccc.' : '.aa.....ccccc.', '.aa.....cbbbc.', '.aa.....ccccc.', '..............'];
+    return makeTestGame({ map, owners, nations: [{ troops: 5000 }, { troops: 500 }, { troops: 500 }] });
+  }
+  const click = (g: Game) => applyCommand(g, { type: 'attack', nation: 1, tile: tileOf(g.map, 10, 2), ratio: 0.5, allowBoat: true });
+
+  it('clicking an ally changes nothing, however far away it is', () => {
+    const g = across(true);
+    g.relations.set(1, 2, 'allied');
+    const troops = g.nations[1].troops;
+    expect(click(g)).toEqual({ ok: false, reason: 'allied' });
+    expect(g.drainEvents()).toEqual([{ type: 'rejected', nation: 1, reason: 'allied' }]);
+    expect(boats(g)).toEqual([]);
+    expect(g.nations[1].troops).toBe(troops);
+    expect(g.relations.get(1, 3)).toBe('neutral');
+  });
+
+  it('an enemy with no coast of its own can’t be reached by boat; its neighbour is left alone', () => {
+    const g = across(false);
+    g.relations.set(1, 2, 'war');
+    expect(click(g)).toEqual({ ok: false, reason: 'no beach' });
+    expect(g.drainEvents()).toEqual([{ type: 'rejected', nation: 1, reason: 'no beach' }]);
+    expect(boats(g)).toEqual([]);
+    expect(g.relations.get(1, 3)).toBe('neutral');
+  });
+
+  it('the boat lands on the clicked nation’s own beach', () => {
+    const g = across(true);
+    expect(click(g)).toEqual({ ok: true });
+    expect(boats(g)).toEqual([expect.objectContaining({ owner: 1, targetTile: tileOf(g.map, 9, 1) })]);
+    expect(g.relations.get(1, 2)).toBe('war');
+    expect(g.relations.get(1, 3)).toBe('neutral');
+  });
+});

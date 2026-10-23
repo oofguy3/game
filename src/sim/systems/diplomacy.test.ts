@@ -263,3 +263,36 @@ describe('alliance victory', () => {
     expect(g.phase).toBe('ended');
   });
 });
+
+describe('making peace with units in flight', () => {
+  it('calls back boats, paratroopers and bombers heading for the other side', () => {
+    const map = ['......................', '.####............####.', '.####............####.', '.####............####.', '......................'];
+    const owners = ['.'.repeat(22), '.aaaa............bbbb.', '.aaaa............bbbb.', '.aaaa............bbbb.', '.'.repeat(22)];
+    const g = makeTestGame({ map, owners, nations: [{ troops: 10_000, gold: 100_000 }, { troops: 2_000 }] });
+    g.buildings.add({ id: g.nextId(), type: 'airport', owner: 1, tile: tileOf(g.map, 2, 2), ticksLeft: 0, cooldown: 0 });
+    g.buildings.add({ id: g.nextId(), type: 'airport', owner: 1, tile: tileOf(g.map, 2, 1), ticksLeft: 0, cooldown: 0 });
+    g.buildings.add({ id: g.nextId(), type: 'city', owner: 2, tile: tileOf(g.map, 18, 2), ticksLeft: 0, cooldown: 0 });
+    ok(g, { type: 'boat', nation: 1, tile: tileOf(g.map, 17, 1), ratio: 0.1 });
+    ok(g, { type: 'paradrop', nation: 1, tile: tileOf(g.map, 19, 2), ratio: 0.1 });
+    ok(g, { type: 'bomb', nation: 1, tile: tileOf(g.map, 18, 2) });
+    const troops = g.nations[1].troops;
+    const away = [...g.units.values()].filter((u) => u.type === 'troopBoat' || u.type === 'paraPlane').reduce((s, u) => s + u.troops, 0);
+    expect(away).toBeGreaterThan(0);
+    ok(g, { type: 'proposePeace', nation: 2, to: 1 });
+    ok(g, { type: 'respond', nation: 1, requestId: lastRequest(g), accept: true });
+    expect([...g.units.values()].filter((u) => u.type === 'troopBoat' || u.type === 'paraPlane')).toEqual([]);
+    expect(g.nations[1].troops).toBeCloseTo(troops + away, 6);
+    g.drainEvents();
+    const events: GameEvent[] = [];
+    for (let i = 0; i < 100; i++) {
+      stepUnits(g);
+      events.push(...g.drainEvents());
+    }
+    expect(g.relations.get(1, 2)).toBe('neutral');
+    expect(events.filter((e) => e.type === 'relation' || e.type === 'bombed' || e.type === 'landed')).toEqual([]);
+    expect(g.buildings.at(tileOf(g.map, 18, 2))).toBeDefined();
+    expect(g.nations[2].tiles).toBe(12);
+    // the bomber went home
+    expect([...g.units.values()].filter((u) => u.type === 'bomber')).toEqual([]);
+  });
+});

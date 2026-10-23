@@ -72,7 +72,8 @@ export function startAttack(
 
 /**
  * The `attack` command: attacks the owner of `cmd.tile` (or spreads into unowned land) with
- * floor(troops × ratio) troops, the ratio clamped to [`minAttackRatio`, 1].
+ * floor(troops × ratio) troops, the ratio clamped to [`minAttackRatio`, 1]. With `allowBoat`, a target out of reach
+ * over land is attacked by boat, landing on its nearest beach or free beach ('no beach' when there's none in reach).
  */
 export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack' }>): CommandResult {
   const { map } = game;
@@ -82,8 +83,10 @@ export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack'
   const ratio = Math.min(1, Math.max(CONFIG.combat.minAttackRatio, cmd.ratio));
   const troops = Math.floor(game.nations[cmd.nation].troops * ratio);
   const target = game.owner[tile];
+  if (target !== 0 && target !== cmd.nation && game.relations.get(cmd.nation, target) === 'allied') return fail('allied');
   if (cmd.allowBoat && target !== cmd.nation && !reachableOverLand(game, cmd.nation, tile)) {
-    return launchBoat(game, cmd.nation, nearestBeach(game, cmd.nation, tile) ?? tile, troops);
+    const beach = nearestBeach(game, tile);
+    return beach === null ? fail('no beach') : launchBoat(game, cmd.nation, beach, troops);
   }
   return startAttack(game, cmd.nation, target, troops);
 }
@@ -92,15 +95,14 @@ export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack'
 const BEACH_SEARCH = 4000;
 
 /**
- * Where a boat aimed at `tile` should land: the coastal tile nearest it (breadth-first over its landmass) that isn't
- * `nation`'s own or an ally's; `tile` itself when it qualifies; null if none is within reach.
+ * Where a boat aimed at `tile` should land: the coastal tile nearest it (breadth-first over its landmass) that belongs
+ * to `tile`'s owner or to no one, so the landing never hits a third nation; `tile` itself when it qualifies; null if
+ * none is within reach.
  */
-function nearestBeach(game: Game, nation: NationId, tile: TileIndex): TileIndex | null {
+function nearestBeach(game: Game, tile: TileIndex): TileIndex | null {
   const { map } = game;
-  const landable = (t: TileIndex): boolean => {
-    const o = game.owner[t];
-    return map.coastal[t] === 1 && o !== nation && (o === 0 || game.relations.get(nation, o) !== 'allied');
-  };
+  const target = game.owner[tile];
+  const landable = (t: TileIndex): boolean => map.coastal[t] === 1 && (game.owner[t] === target || game.owner[t] === 0);
   const queue: TileIndex[] = [tile];
   const seen = new Set<TileIndex>(queue);
   for (let i = 0; i < queue.length && queue.length < BEACH_SEARCH; i++) {

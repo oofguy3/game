@@ -193,7 +193,7 @@ function attackOn(game: Game, p: Perception, target: NationId, troops: number): 
 }
 
 /** The first `target` tile (unowned land for 0) touching `me`'s border, in border order; null if none. */
-function frontierTile(game: Game, me: NationId, target: NationId): TileIndex | null {
+export function frontierTile(game: Game, me: NationId, target: NationId): TileIndex | null {
   let found: TileIndex | null = null;
   for (const b of game.nations[me].border) {
     forEachNeighbor(game.map, b, (t) => {

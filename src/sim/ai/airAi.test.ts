@@ -59,6 +59,22 @@ describe('combined arms', () => {
     expect(bot.memory.pendingAttack).toBeNull();
   });
 
+  it('aims the held attack at the target’s front as it is when the bombs fall', () => {
+    const g = front();
+    place(g, 1, 'airport', tileOf(g.map, 10, 4));
+    place(g, 2, 'fortress', tileOf(g.map, 44, 4));
+    const bot = new Bot(g, 1, 'hard', 'aggressive', SEED);
+    for (const c of bot.think()) expect(applyCommand(g, c)).toEqual({ ok: true });
+    const pending = bot.memory.pendingAttack!;
+    // the remembered tile has become a's before the attack goes out
+    g.setOwner(pending.tile, 1);
+    while (g.tick < pending.at) g.step();
+    const attack = bot.think().find((c) => c.type === 'attack' && c.ratio === pending.ratio) as Extract<Command, { type: 'attack' }>;
+    expect(attack).toBeDefined();
+    expect(g.owner[attack.tile]).toBe(2);
+    expect(applyCommand(g, attack)).toEqual({ ok: true });
+  });
+
   it('attacks at once when the front is not fortified', () => {
     const g = front();
     place(g, 1, 'airport', tileOf(g.map, 10, 4));
