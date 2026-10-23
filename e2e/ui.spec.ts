@@ -23,6 +23,26 @@ test('the right-click menu slides in when it opens', async ({ page }) => {
   await expect(page.locator('.context-menu')).toHaveClass(/\benter\b/);
 });
 
+test('a new news line slides in without the older lines appearing again', async ({ page }) => {
+  await page.goto(GAME);
+  await page.waitForFunction(() => window.__test?.state.phase === 'spawn');
+  const cities = page.locator('.feed-line', { hasText: 'City complete' });
+  // the feed redraws with the next update from the game
+  const add = async (tile: number, shown: number): Promise<void> => {
+    await page.evaluate((t) => {
+      const s = window.__test.state;
+      s.feed.push({ type: 'buildingDone', nation: s.init.playerId, building: 'city', tile: t });
+    }, tile);
+    await expect(cities).toHaveCount(shown);
+  };
+  await add(1, 1);
+  await cities.last().evaluate((el) => el.setAttribute('data-first', ''));
+  await add(2, 2);
+  // the first line is still the same element, so its slide-in does not play again; only the new line slides in
+  await expect(page.locator('.feed-line[data-first]')).toHaveCount(1);
+  expect(await page.locator('.feed-line').last().getAttribute('data-first')).toBeNull();
+});
+
 async function playing(page: import('@playwright/test').Page): Promise<void> {
   await page.goto(GAME);
   await page.waitForFunction(() => window.__test?.state.phase === 'spawn');

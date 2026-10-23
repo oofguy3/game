@@ -5,25 +5,33 @@ import { describeEvent } from './eventText';
 
 const LINES = 6;
 
-/** The last few things that happened to the player, in plain English. */
+/**
+ * The last few things that happened to the player, in plain English. Each line keeps its element while it is shown,
+ * so only new lines slide in.
+ */
 export class EventFeed {
   readonly el = h('div', { class: 'feed' });
-  private shown = '';
+  /** The lines on show, oldest first, with the event each one tells. */
+  private lines: { event: GameEvent; el: HTMLElement }[] = [];
 
   constructor(private readonly state: ClientState, private readonly names: Map<NationId, string>) {}
 
   update(): void {
     const me = this.state.init.playerId;
-    const lines: { text: string; alarm: boolean }[] = [];
+    const shown = new Map(this.lines.map((l) => [l.event, l.el]));
+    const lines: { event: GameEvent; el: HTMLElement }[] = [];
     for (let i = this.state.feed.length - 1; i >= 0 && lines.length < LINES; i--) {
       const e = this.state.feed[i];
       const text = describeEvent(e, this.names, me);
-      if (text) lines.unshift({ text, alarm: isAlarm(e, me) });
+      if (!text) continue;
+      const el = shown.get(e) ?? h('div', { class: isAlarm(e, me) ? 'feed-line alarm' : 'feed-line', text });
+      lines.unshift({ event: e, el });
     }
-    const key = lines.map((l) => `${l.alarm ? '!' : ''}${l.text}`).join('\n');
-    if (key === this.shown) return;
-    this.shown = key;
-    this.el.replaceChildren(...lines.map(({ text, alarm }) => h('div', { class: alarm ? 'feed-line alarm' : 'feed-line', text })));
+    const keep = new Set(lines.map((l) => l.el));
+    for (const l of this.lines) if (!keep.has(l.el)) l.el.remove();
+    // new events are always the latest, so new lines go at the end and the others stay where they are
+    for (const l of lines) if (l.el.parentNode !== this.el) this.el.append(l.el);
+    this.lines = lines;
   }
 }
 
