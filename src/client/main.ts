@@ -22,6 +22,7 @@ import { Leaderboard } from './ui/leaderboard';
 import { PauseButton } from './ui/pauseButton';
 import { createMenu } from './ui/menu';
 import { RequestPopups } from './ui/requests';
+import { startBackdrop } from './ui/titleBackdrop';
 import './styles.css';
 
 /** Space kept between the fitted map and the bottom bar, in pixels. */
@@ -33,8 +34,13 @@ const testMode = params.get('test') === '1';
 const app = h('div', { class: 'app' });
 document.body.append(app);
 
+/** Stops the drifting map behind the title screen, while it is showing. */
+let stopBackdrop: (() => void) | null = null;
 if (params.get('autostart') === '1') start(optionsFromUrl(params));
-else app.append(createMenu(start, testMode));
+else {
+  app.append(createMenu(start, testMode));
+  stopBackdrop = startBackdrop(app);
+}
 
 /** Match options from the URL (?map=random&size=small&seed=7&bots=4&difficulty=easy). */
 function optionsFromUrl(p: URLSearchParams): StartOptions {
@@ -57,6 +63,8 @@ function backToMenu(): void {
 }
 
 function start(options: StartOptions): void {
+  stopBackdrop?.();
+  stopBackdrop = null;
   app.replaceChildren();
   const glCanvas = h('canvas', { class: 'map-gl' });
   const canvas = h('canvas', { class: 'map' });

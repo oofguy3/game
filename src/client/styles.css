@@ -170,6 +170,26 @@ button.build.selected { outline: 2px solid var(--accent); background: rgba(59, 1
   padding: 26px 28px; width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px;
 }
 .menu-card h1, .end-card h1 { margin: 0; font-size: 30px; letter-spacing: 0.01em; }
+
+/* Title screen */
+canvas.backdrop { position: absolute; inset: 0; display: block; }
+.app.backdrop-fallback { background: radial-gradient(circle at 50% 35%, #1e3a8a 0%, #0f172a 60%, #020617 100%); }
+.overlay.menu { background: radial-gradient(circle at 50% 45%, rgba(2, 6, 23, 0.1), rgba(2, 6, 23, 0.65)); }
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-badge { flex: none; }
+.logo-badge svg { display: block; width: 100%; height: 100%; }
+.logo-large .logo-badge { width: 64px; height: 64px; filter: drop-shadow(0 4px 12px rgba(2, 6, 23, 0.5)); }
+.logo-small .logo-badge { width: 28px; height: 28px; }
+.logo-word { font-weight: 800; letter-spacing: 0.12em; font-size: 22px; }
+.logo-large .logo-word { font-size: 32px; }
+.field-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.segmented {
+  display: flex; gap: 3px; padding: 3px; border-radius: 10px;
+  background: rgba(30, 41, 59, 0.8); border: 1px solid var(--line);
+}
+.segmented button { flex: 1; border: none; background: transparent; color: var(--muted); padding: 7px 6px; border-radius: 7px; }
+.segmented button:hover:not(:disabled) { background: rgba(71, 85, 105, 0.6); border: none; color: var(--text); }
+.segmented button.on, .segmented button.on:hover { background: var(--accent); color: #fff; font-weight: 600; }
 .tagline { margin: 0 0 6px; color: var(--muted); }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }

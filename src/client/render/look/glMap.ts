@@ -155,9 +155,10 @@ export class GlMap {
     return [this.pixel[0], this.pixel[1], this.pixel[2]];
   }
 
-  /** Throws the context away, as a lost graphics chip would (for tests). */
-  debugLoseContext(): void {
+  /** Releases the graphics context; the map stops drawing (this is also how tests stand in for a lost chip). */
+  dispose(): void {
     this.gl.getExtension('WEBGL_lose_context')?.loseContext();
+    this.contextLost = true;
   }
 }
 

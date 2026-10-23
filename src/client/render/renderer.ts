@@ -61,7 +61,7 @@ export class Renderer {
 
   /** Throws the graphics context away, as a lost graphics chip would (for tests). */
   debugLoseContext(): void {
-    this.gl?.debugLoseContext();
+    this.gl?.dispose();
   }
 
   /** The flat territory picture, one pixel per tile, kept up to date in both looks. */
