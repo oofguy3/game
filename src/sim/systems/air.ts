@@ -3,6 +3,7 @@ import { BUILDING_TYPES } from '../../shared/types';
 import type { NationId, TileIndex, UnitType } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
+import { scaledTicks } from '../core/tuning';
 import { distance, isLand, tileOf, xOf, yOf } from '../map/grid';
 import { landTroops } from './attacks';
 import { buildingsInRadius, destroyBuilding } from './buildings';
@@ -94,7 +95,10 @@ export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex
   return { ok: true };
 }
 
-/** Builds a fighter at `nation`'s finished airport `airportId` for `fighter.cost`; it guards that airport's sky. */
+/**
+ * Builds a fighter at `nation`'s finished airport `airportId` for `fighter.cost`; it guards that airport's sky once
+ * ready, after `fighter.buildTicks` scaled by the rules' build time scale.
+ */
 export function buildFighter(game: Game, nation: NationId, airportId: number): CommandResult {
   const airport = game.buildings.byId.get(airportId);
   if (!airport || airport.owner !== nation || airport.type !== 'airport') return fail('not your airport');
@@ -105,7 +109,8 @@ export function buildFighter(game: Game, nation: NationId, airportId: number): C
   n.gold -= cost;
   spawnUnit(game, {
     type: 'fighter', owner: nation, x: xOf(game.map, airport.tile), y: yOf(game.map, airport.tile), hp,
-    cooldown: buildTicks, patrol: airport.tile, mission: 'patrol', homeId: airport.id,
+    cooldown: scaledTicks(buildTicks, game.tuning.buildTimeScale), patrol: airport.tile, mission: 'patrol',
+    homeId: airport.id,
   });
   return { ok: true };
 }

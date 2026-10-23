@@ -1,3 +1,5 @@
+import { DEFAULT_RULES } from '../../shared/rules';
+import type { MatchRules } from '../../shared/rules';
 import type { Difficulty } from '../../shared/types';
 import { Game } from '../core/game';
 import type { Nation } from '../core/nation';
@@ -16,6 +18,8 @@ export interface TestGameOptions {
   victory?: boolean;
   /** Per-bot difficulty, `'normal'` where not given. */
   difficulties?: Difficulty[];
+  /** Rules to change from `DEFAULT_RULES`. */
+  rules?: Partial<MatchRules>;
 }
 
 const FIRST_OWNER_LETTER = 'a'.charCodeAt(0);
@@ -31,6 +35,7 @@ export function makeTestGame(opts: TestGameOptions): Game {
     bots: opts.nations.map((_, i) => ({ difficulty: opts.difficulties?.[i] ?? 'normal' })),
     debug: opts.debug,
     checkVictory: opts.victory ?? false,
+    rules: { ...DEFAULT_RULES, ...opts.rules },
   });
   if (opts.owners) applyOwners(game, opts.owners);
   opts.nations.forEach((overrides, i) => Object.assign(game.nations[i + 1], overrides));

@@ -1,4 +1,5 @@
 import { GAME_NAME } from '../shared/constants';
+import { rulesFromParams } from '../shared/rules';
 import type { BuildingType, Command, Difficulty, MapChoice, MapSize } from '../shared/types';
 import type { GameUpdate, InitPayload, StartOptions } from '../worker/protocol';
 import { SoundDirector } from './audio/director';
@@ -59,7 +60,7 @@ else {
   stopBackdrop = startBackdrop(app, allowSoftwareGl);
 }
 
-/** Match options from the URL (?map=random&size=small&seed=7&bots=4&difficulty=easy). */
+/** Match options from the URL (?map=random&size=small&seed=7&bots=4&difficulty=easy, plus the rules' parameters). */
 function optionsFromUrl(p: URLSearchParams): StartOptions {
   const seed = Math.max(1, Math.round(Number(p.get('seed')) || 1));
   const size = (['small', 'medium', 'large'].includes(p.get('size') ?? '') ? p.get('size') : 'medium') as MapSize;
@@ -72,6 +73,7 @@ function optionsFromUrl(p: URLSearchParams): StartOptions {
     seed,
     playerName: p.get('name') || 'You',
     debug: testMode,
+    rules: rulesFromParams(p),
   };
 }
 

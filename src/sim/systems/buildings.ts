@@ -2,6 +2,7 @@ import { CONFIG } from '../../shared/config';
 import type { BuildingType, Command, NationId, TileIndex } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
+import { scaledTicks } from '../core/tuning';
 import { distance, isLand, tileOf, xOf, yOf } from '../map/grid';
 
 export interface Building {
@@ -139,17 +140,16 @@ export function canPlace(game: Game, nation: NationId, type: BuildingType, tile:
 }
 
 /**
- * The `build` command: pays for the building and starts its construction, `buildTicks` long. Reports the reason on
- * failure without emitting `rejected`; `applyCommand` does that.
+ * The `build` command: pays for the building and starts its construction, `buildTicks` long (scaled by the rules' build
+ * time scale). Reports the reason on failure without emitting `rejected`; `applyCommand` does that.
  */
 export function build(game: Game, cmd: Extract<Command, { type: 'build' }>): CommandResult {
   const { nation, building: type, tile } = cmd;
   const placement = canPlace(game, nation, type, tile);
   if (!placement.ok) return placement;
   game.nations[nation].gold -= buildingCost(game, nation, type);
-  game.buildings.add({
-    id: game.nextId(), type, owner: nation, tile, ticksLeft: CONFIG.buildings[type].buildTicks, cooldown: 0,
-  });
+  const ticksLeft = scaledTicks(CONFIG.buildings[type].buildTicks, game.tuning.buildTimeScale);
+  game.buildings.add({ id: game.nextId(), type, owner: nation, tile, ticksLeft, cooldown: 0 });
   return { ok: true };
 }
 

@@ -3,6 +3,7 @@ import type { NationId, TileIndex } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
 import type { Nation } from '../core/nation';
+import { scaledTicks } from '../core/tuning';
 import { distance, forEachNeighbor, isLand, tileOf, xOf, yOf } from '../map/grid';
 import { adjacentWater, findWaterPath } from '../map/waterNav';
 import { landTroops } from './attacks';
@@ -149,10 +150,13 @@ export function stepTradeShip(game: Game, u: Unit): void {
   payTrade(game, u.partner, u.owner, gold);
 }
 
-/** Pays `nation` its share of a trade with `partner` worth `gold`, after its trade multiplier. */
+/**
+ * Pays `nation` its share of a trade with `partner` worth `gold`: the gold times the rules' gold scale, then times its
+ * trade multiplier.
+ */
 export function payTrade(game: Game, nation: NationId, partner: NationId, gold: number): void {
   const n = game.nations[nation];
-  const paid = gold * tradeMultiplier(game, n);
+  const paid = gold * game.tuning.goldScale * tradeMultiplier(game, n);
   n.gold += paid;
   n.stats.goldEarned += paid;
   n.tradeIncome += paid * (1 - CONFIG.gold.tradeIncomeDecay);
@@ -161,7 +165,8 @@ export function payTrade(game: Game, nation: NationId, partner: NationId, gold: 
 
 /**
  * Builds a warship at `nation`'s finished naval base `navalBaseId` for `warship.cost` gold. It launches on the
- * neighbouring water, patrolling there, and can't fight for `warship.buildTicks` while it is fitted out.
+ * neighbouring water, patrolling there, and can't fight for `warship.buildTicks` (scaled by the rules' build time
+ * scale) while it is fitted out.
  */
 export function buildWarship(game: Game, nation: NationId, navalBaseId: number): CommandResult {
   const base = game.buildings.byId.get(navalBaseId);
@@ -175,8 +180,8 @@ export function buildWarship(game: Game, nation: NationId, navalBaseId: number):
   if (water === null) return fail('no water');
   n.gold -= cost;
   spawnUnit(game, {
-    type: 'warship', owner: nation, x: xOf(game.map, water), y: yOf(game.map, water), hp, cooldown: buildTicks,
-    patrol: water, mission: 'patrol', homeId: base.id,
+    type: 'warship', owner: nation, x: xOf(game.map, water), y: yOf(game.map, water), hp,
+    cooldown: scaledTicks(buildTicks, game.tuning.buildTimeScale), patrol: water, mission: 'patrol', homeId: base.id,
   });
   return { ok: true };
 }

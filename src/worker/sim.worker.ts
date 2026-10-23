@@ -44,6 +44,7 @@ function start(options: StartOptions, worldMap?: ArrayBuffer): void {
     player: { name: options.playerName },
     bots: Array.from({ length: bots }, () => ({ difficulty: options.difficulty })),
     debug: options.debug,
+    rules: options.rules,
   });
   const init = buildInit(match, lookOptions(options.map));
   ctx.postMessage({ type: 'init', init }, [init.terrain.buffer]);

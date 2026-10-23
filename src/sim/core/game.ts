@@ -1,5 +1,7 @@
 import { nationColor, UNOWNED_COLOR } from '../../shared/colors';
 import { CONFIG } from '../../shared/config';
+import { DEFAULT_RULES } from '../../shared/rules';
+import type { MatchRules } from '../../shared/rules';
 import type {
   Command, DiplomacyRequest, Difficulty, GameEvent, GameResult, NationId, Personality, Phase, TileIndex,
 } from '../../shared/types';
@@ -22,6 +24,8 @@ import { applyCommand } from './commands';
 import { nationNames } from './names';
 import { createNation } from './nation';
 import type { Nation } from './nation';
+import { tuningFor } from './tuning';
+import type { Tuning } from './tuning';
 
 export interface GameSetup {
   map: GameMap;
@@ -32,6 +36,8 @@ export interface GameSetup {
   debug?: boolean;
   /** Whether `step` ends the game on a win condition. Defaults to true. */
   checkVictory?: boolean;
+  /** How the match is played; `DEFAULT_RULES` when not given. */
+  rules?: MatchRules;
 }
 
 /**
@@ -54,6 +60,10 @@ export class Game {
   readonly rng: Rng;
   readonly debug: boolean;
   readonly checkVictory: boolean;
+  /** How the match is played. */
+  readonly rules: MatchRules;
+  /** The numbers the rules give, read by the systems in place of the matching `CONFIG` values. */
+  readonly tuning: Tuning;
   tick = 0;
   phase: Phase = 'spawn';
   result: GameResult | null = null;
@@ -93,6 +103,8 @@ export class Game {
     this.rng = new Rng(setup.seed);
     this.debug = setup.debug ?? false;
     this.checkVictory = setup.checkVictory ?? true;
+    this.rules = setup.rules ?? DEFAULT_RULES;
+    this.tuning = tuningFor(this.rules);
     this.spawnEndsAt = setup.spawnTicks ?? CONFIG.spawn.phaseTicks;
     this.owner = new Uint16Array(setup.map.width * setup.map.height);
     this.unownedLand = Int32Array.from(setup.map.landmassSize);

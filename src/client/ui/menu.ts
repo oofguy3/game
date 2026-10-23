@@ -1,3 +1,4 @@
+import { DEFAULT_RULES } from '../../shared/rules';
 import type { Difficulty, MapSize } from '../../shared/types';
 import type { StartOptions } from '../../worker/protocol';
 import { h } from './dom';
@@ -60,6 +61,7 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
       seed: seedValue,
       playerName: name.value.trim() || 'You',
       debug,
+      rules: DEFAULT_RULES,
     });
   });
   return h('div', { class: 'overlay menu' }, form);

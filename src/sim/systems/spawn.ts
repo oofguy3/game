@@ -12,7 +12,8 @@ const fail = (reason: string): CommandResult => ({ ok: false, reason });
 /**
  * Puts (or moves) `nation`'s start at `tile`. Valid only in the spawn phase, on land that is unowned (or already the
  * nation's own, since its old disk is released first), at least `game.spawnSpacing` from every other nation's spawn.
- * On success the nation's old disk is released, a new one is claimed, and troops and gold are set to the start values.
+ * On success the nation's old disk is released, a new one is claimed, and troops and gold are set to the start values
+ * (the start gold the rules give).
  * Reports the reason on failure without emitting `rejected`; `applyCommand` does that.
  */
 export function spawnNation(game: Game, nation: Nation, tile: TileIndex): CommandResult {
@@ -77,7 +78,7 @@ function placeSpawn(game: Game, nation: Nation, tile: TileIndex): void {
   nation.spawned = true;
   nation.spawnTile = tile;
   nation.troops = CONFIG.spawn.startTroops;
-  nation.gold = CONFIG.spawn.startGold;
+  nation.gold = game.tuning.startGold;
   game.emit({ type: 'spawned', nation: nation.id, tile });
 }
 

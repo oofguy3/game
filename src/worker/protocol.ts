@@ -1,3 +1,4 @@
+import type { MatchRules } from '../shared/rules';
 import type {
   BuildingType, Command, DiplomacyRequest, Difficulty, GameEvent, GameResult, MapChoice, NationId, Phase, Relation,
   TileIndex, UnitType,
@@ -12,6 +13,7 @@ export interface StartOptions {
   seed: number;
   playerName: string;
   debug: boolean;
+  rules: MatchRules;
 }
 
 export type ToWorker =

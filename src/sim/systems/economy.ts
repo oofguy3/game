@@ -3,35 +3,39 @@ import type { Game } from '../core/game';
 import type { Nation } from '../core/nation';
 
 /**
- * The troops `n` can hold before the excess starts to decay: `baseMax` + `perTile` × tiles + `city.maxTroops` × active
- * cities.
+ * The troops `n` can hold before the excess starts to decay: (`baseMax` + `perTile` × tiles + `city.maxTroops` × active
+ * cities) × the rules' troop cap scale.
  */
 export function maxTroops(game: Game, n: Nation): number {
   const { baseMax, perTile } = CONFIG.troops;
-  return baseMax + perTile * n.tiles + CONFIG.buildings.city.maxTroops * n.buildingCounts.city;
+  return (baseMax + perTile * n.tiles + CONFIG.buildings.city.maxTroops * n.buildingCounts.city)
+    * game.tuning.troopCapScale;
 }
 
 /**
  * The troops `n` gains this tick. Up to max it is (`baseGrowth` + `growthRate` × troops × (1 − troops / max)) ×
- * (1 + `barracks.growthBonus` × active barracks), never negative, so growth is fastest at half of max. Above max it is
- * −`overMaxDecay` × the excess, which shrinks the excess toward max; barracks don't change that.
+ * (1 + `barracks.growthBonus` × active barracks) × the rules' troop growth scale, never negative, so growth is fastest
+ * at half of max. Above max it is −`overMaxDecay` × the excess, which shrinks the excess toward max; barracks and the
+ * rules don't change that.
  */
 export function troopGrowth(game: Game, n: Nation): number {
   const { baseGrowth, growthRate, overMaxDecay } = CONFIG.troops;
   const max = maxTroops(game, n);
   if (n.troops > max) return -overMaxDecay * (n.troops - max);
   const barracks = 1 + CONFIG.buildings.barracks.growthBonus * n.buildingCounts.barracks;
-  return Math.max(0, baseGrowth + growthRate * n.troops * (1 - n.troops / max)) * barracks;
+  return Math.max(0, baseGrowth + growthRate * n.troops * (1 - n.troops / max)) * barracks
+    * game.tuning.troopGrowthScale;
 }
 
 /**
- * The gold `n` earns each tick: `gold.base` + `gold.perTile` × tiles + `factory.gold` × active factories +
- * `bank.gold` × active banks.
+ * The gold `n` earns each tick: (`gold.base` + `gold.perTile` × tiles + `factory.gold` × active factories +
+ * `bank.gold` × active banks) × the rules' gold scale.
  */
 export function goldIncome(game: Game, n: Nation): number {
   const { base, perTile } = CONFIG.gold;
   const { factory, bank } = CONFIG.buildings;
-  return base + perTile * n.tiles + factory.gold * n.buildingCounts.factory + bank.gold * n.buildingCounts.bank;
+  return (base + perTile * n.tiles + factory.gold * n.buildingCounts.factory + bank.gold * n.buildingCounts.bank)
+    * game.tuning.goldScale;
 }
 
 /** What `n`'s trade gold is multiplied by: 1 + `bank.tradeBonus` × active banks. */
