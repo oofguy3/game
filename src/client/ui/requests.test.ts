@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiplomacyRequest } from '../../shared/types';
 import { makeClientState } from '../testing/fixtures';
-import { describeRequest, isStale, secondsLeft } from './requests';
+import { describeRequest, isStale, openRequests, secondsLeft } from './requests';
 
 const names = new Map([[1, 'You'], [2, 'Varlonia'], [3, 'Kestria']]);
 const req = (over: Partial<DiplomacyRequest>): DiplomacyRequest => ({ id: 9, kind: 'alliance', from: 2, to: 1, expiresAt: 300, ...over });
@@ -34,5 +34,16 @@ describe('isStale', () => {
     state.nations.get(3)!.relationToPlayer = 'war';
     expect(isStale(state, req({ kind: 'peace', from: 3 }))).toBe(false);
     expect(isStale(state, req({ kind: 'deal', from: 3 }))).toBe(false);
+  });
+});
+
+describe('openRequests', () => {
+  it('lists the live requests, and none once the game is over', () => {
+    const { state } = makeClientState(['###'], ['abc']);
+    state.nations.get(2)!.relationToPlayer = 'allied';
+    state.requests = [req({ id: 1, kind: 'alliance', from: 2 }), req({ id: 2, kind: 'deal', from: 3 })];
+    expect(openRequests(state).map((r) => r.id)).toEqual([2]);
+    state.phase = 'ended';
+    expect(openRequests(state)).toEqual([]);
   });
 });

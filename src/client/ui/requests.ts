@@ -38,6 +38,11 @@ export function isStale(state: ClientState, req: DiplomacyRequest): boolean {
   return (req.kind === 'alliance' && relation === 'allied') || (req.kind === 'peace' && relation !== 'war');
 }
 
+/** The requests worth a pop-up: none once the game is over (nothing can be answered), and never stale ones. */
+export function openRequests(state: ClientState): DiplomacyRequest[] {
+  return state.phase === 'ended' ? [] : state.requests.filter((r) => !isStale(state, r));
+}
+
 /** Whole seconds until `req` expires, at tick `tick`. */
 export function secondsLeft(req: DiplomacyRequest, tick: number): number {
   return Math.max(0, Math.ceil((req.expiresAt - tick) / TICKS_PER_SECOND));
@@ -60,7 +65,7 @@ export class RequestPopups {
   ) {}
 
   update(): void {
-    const requests = this.state.requests.filter((r) => !isStale(this.state, r));
+    const requests = openRequests(this.state);
     const open = new Set(requests.map((r) => r.id));
     for (const id of this.answered) if (!open.has(id)) this.answered.delete(id);
     for (const [id, { card }] of this.cards) {

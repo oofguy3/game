@@ -104,7 +104,7 @@ export class DiplomacyPanel {
     const id = this.nation;
     if (id === null) return;
     const n = this.state.nations.get(id);
-    if (!n || !n.alive) {
+    if (!n || !n.alive || this.state.phase === 'ended') {
       this.close();
       return;
     }
