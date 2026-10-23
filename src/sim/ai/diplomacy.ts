@@ -10,8 +10,9 @@ import type { NeighborInfo, Perception } from './perception';
 
 /**
  * Whether `p.me` accepts `req`, a request addressed to it:
- * - an alliance, unless it comes from the runaway leader, from a nation trusted less than `allyTrust` or from our best
- *   target; and only from a partner with `allyStrength` of our troops, or if we are diplomatic (`allyDiplomacy`);
+ * - an alliance, unless it comes from the runaway leader, would leave us nothing to take by land, comes from a nation
+ *   trusted less than `allyTrust` or from our best target; and only from a partner with `allyStrength` of our troops,
+ *   or if we are diplomatic (`allyDiplomacy`);
  * - peace, when they would take more of us than we of them, or when we have another war;
  * - a deal, when what we get is worth more than what we give (gold at 1, troops at `troopGoldValue`, ×`warTroopValue`
  *   at war) and we can pay;
@@ -23,6 +24,7 @@ export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: Diplom
   switch (req.kind) {
     case 'alliance': {
       if (req.from === p.leader && p.leaderShare > ai.gangUpShare) return false;
+      if (isolatedWith(p, req.from)) return false;
       if (game.relations.trust(p.me, req.from) < ai.allyTrust) return false;
       if (scoreTargets(game, p, bot)[0]?.target === req.from) return false;
       return game.nations[req.from].troops >= ai.allyStrength * p.troops || bot.weights.diplomacy >= ai.allyDiplomacy;
@@ -47,6 +49,11 @@ export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: Diplom
       return true;
     }
   }
+}
+
+/** Whether `p.me` would have nothing left to expand into by land if it were also allied with `partner`. */
+function isolatedWith(p: Perception, partner: NationId): boolean {
+  return p.neutralBorder === 0 && p.neighbors.every((n) => n.id === partner || n.relation === 'allied');
 }
 
 /** What `deal` (offered to `p.me`) is worth to it: what it gets less what it gives, in gold. */
@@ -150,15 +157,26 @@ function troopPurchase(game: Game, p: Perception): Command | null {
 }
 
 /**
- * The ally `p.me` would betray now, or null. Only profiles that betray, with a betrayal weight of `betrayalWeight` or
- * more; the ally must score `betrayalScore` times our best other target and have under `betrayalDensity` of our
- * density.
+ * The ally `p.me` would betray now, or null; only profiles that betray. Boxed in by allies (no free land, every
+ * neighbour an ally) with troops above the band, the ally that scores best, whatever the personality. Otherwise only
+ * with a betrayal weight of `betrayalWeight` or more, an ally that scores `betrayalScore` times our best other target
+ * and has under `betrayalDensity` of our density.
  */
 export function considerBetrayal(game: Game, p: Perception, bot: Bot): NationId | null {
   const ai = CONFIG.ai;
-  if (!bot.profile.betrayal || bot.weights.betrayal < ai.betrayalWeight) return null;
+  if (!bot.profile.betrayal) return null;
   const allies = p.neighbors.filter((n) => n.relation === 'allied');
   if (allies.length === 0) return null;
+  // boxed in by allies with troops piling up: the weakest-defended ally is the only way on
+  if (p.neutralBorder === 0 && allies.length === p.neighbors.length && p.troopRatio > bot.profile.troopBand[1]) {
+    let pick: { id: NationId; score: number } | null = null;
+    for (const n of allies) {
+      const score = scoreNeighbor(game, p, bot, n);
+      if (score > 0 && (pick === null || score > pick.score)) pick = { id: n.id, score };
+    }
+    if (pick) return pick.id;
+  }
+  if (bot.weights.betrayal < ai.betrayalWeight) return null;
   const next = scoreTargets(game, p, bot).find((s) => game.relations.get(p.me, s.target) !== 'allied')?.score ?? 0;
   let best: { id: NationId; score: number } | null = null;
   for (const n of allies) {

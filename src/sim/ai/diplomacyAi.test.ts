@@ -10,9 +10,12 @@ import { makeTestGame } from '../testing/fixtures';
 import { Bot } from './bot';
 import { considerBetrayal, evaluateRequest, proposeDiplomacy } from './diplomacy';
 import { troopGoldValue } from './economy';
+import { scoreTargets } from './military';
 import { perceive } from './perception';
 
 const SEED = 41;
+/** Hard's troop band ceiling. */
+const DIFFICULTY_HARD_HIGH = 0.65;
 
 /** Three rows: b | a | c, a in the middle with troops to spare and c weak. */
 function middle(troops: { a?: number; b?: number; c?: number } = {}): Game {
@@ -62,6 +65,22 @@ describe('answering alliances', () => {
     const req = request(g, 'alliance', 2, 1);
     expect(evaluate(g, b, req)).toBe(false);
     expect(responses(b.think())).toEqual([{ type: 'respond', nation: 1, requestId: req.id, accept: false }]);
+  });
+
+  it('refuses an alliance that would leave it nothing to take by land', () => {
+    // a (short of troops, so with no target in mind) borders b, already an ally, and c, who asks; no free land
+    const g = middle({ a: 1000, b: 4000, c: 4000 });
+    g.relations.set(1, 2, 'allied');
+    expect(scoreTargets(g, perceive(g, 1), bot(g, 'hard', 'diplomat'))).toEqual([]);
+    expect(evaluate(g, bot(g, 'hard', 'diplomat'), request(g, 'alliance', 3, 1))).toBe(false);
+    // with free land still in reach it may
+    const free = makeTestGame({
+      map: [0, 1, 2].map(() => '#'.repeat(14)), owners: ['bbbbaaaa......', 'bbbbaaaacccc..', 'bbbbaaaacccc..'],
+      nations: [{ troops: 1000, gold: 0 }, { troops: 4000 }, { troops: 4000 }],
+    });
+    free.relations.set(1, 2, 'allied');
+    expect(perceive(free, 1).neutralBorder).toBeGreaterThan(0);
+    expect(evaluate(free, bot(free, 'hard', 'diplomat'), request(free, 'alliance', 3, 1))).toBe(true);
   });
 
   it('refuses an alliance from a nation it does not trust', () => {
@@ -209,6 +228,8 @@ describe('betrayal', () => {
     // the attack waits for a later decision
     expect(cmds.some((c) => c.type === 'attack' && g.owner[c.tile] === 2)).toBe(false);
     for (const c of cmds) expect(applyCommand(g, c)).toEqual({ ok: true });
+    // once its troops are back, it goes for b
+    g.nations[1].troops = 5000;
     expect(traitor.think().some((c) => c.type === 'attack' && g.owner[c.tile] === 2)).toBe(true);
 
     for (const [difficulty, personality] of [['normal', 'aggressive'], ['hard', 'builder'], ['hard', 'diplomat'], ['easy', 'opportunist']] as const) {
@@ -217,6 +238,25 @@ describe('betrayal', () => {
       expect(considerBetrayal(h, perceive(h, 1), loyal)).toBeNull();
       expect(loyal.think().some((c) => c.type === 'breakAlliance')).toBe(false);
     }
+  });
+
+  it('boxed in by allies with troops piling up, any betraying profile breaks with the weakest-defended ally', () => {
+    const boxed = (): Game => {
+      const g = middle({ a: 5000, b: 3000, c: 300 });
+      g.relations.set(1, 2, 'allied');
+      g.relations.set(1, 3, 'allied');
+      return g;
+    };
+    const g = boxed();
+    expect(perceive(g, 1).troopRatio).toBeGreaterThan(DIFFICULTY_HARD_HIGH);
+    // a builder normally never betrays; boxed in, it does, picking weak c over strong b
+    expect(considerBetrayal(g, perceive(g, 1), bot(g, 'hard', 'builder'))).toBe(3);
+    // not when it can't betray at all, nor with troops to spare elsewhere
+    const n = boxed();
+    expect(considerBetrayal(n, perceive(n, 1), bot(n, 'normal', 'aggressive'))).toBeNull();
+    const low = boxed();
+    low.nations[1].troops = 1000;
+    expect(considerBetrayal(low, perceive(low, 1), bot(low, 'hard', 'builder'))).toBeNull();
   });
 
   it('keeps an ally that is not worth betraying', () => {

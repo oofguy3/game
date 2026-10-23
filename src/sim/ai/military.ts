@@ -21,6 +21,8 @@ export interface TargetScore {
 /**
  * Troops to keep home: `incomingReserve` per troop attacking us, plus `reserveFactor` × the biggest threat among our
  * neighbours — one at war counts with all its troops, a neutral one stronger than us with `strongNeutralShare` of them.
+ * Never more than `reserveCap` of our troop cap: troops held at the cap stop growing, so against an overwhelming
+ * neighbour hoarding everything only wastes growth.
  */
 export function reserveNeeded(p: Perception, profile: DifficultyProfile): number {
   const { incomingReserve, strongNeutralShare } = CONFIG.ai;
@@ -29,20 +31,22 @@ export function reserveNeeded(p: Perception, profile: DifficultyProfile): number
     if (n.relation === 'war') threat = Math.max(threat, n.troops);
     else if (n.relation === 'neutral' && n.troops > p.troops) threat = Math.max(threat, strongNeutralShare * n.troops);
   }
-  return incomingReserve * p.incoming + profile.reserveFactor * threat;
+  return Math.min(CONFIG.ai.reserveCap * p.maxTroops, incomingReserve * p.incoming + profile.reserveFactor * threat);
 }
 
 /**
- * Troops available to attack. Above the troop band: everything down to the band floor or the reserve, whichever is
- * higher. Inside or below it: `expandShare` of the troops above the reserve when free land touches us, otherwise
- * nothing (wait and grow). Never negative.
+ * Troops available to attack, never below the band floor or the reserve, whichever is higher: above the band,
+ * everything down to that line; inside it, `expandShare` of the troops above it when free land touches us, otherwise
+ * nothing (wait and grow — troops far below the cap grow slowly, so spending them there stalls a nation). Never
+ * negative.
  */
 export function attackBudget(p: Perception, profile: DifficultyProfile): number {
   const reserve = reserveNeeded(p, profile);
   const [low, high] = profile.troopBand;
   let budget = 0;
-  if (p.troopRatio > high) budget = p.troops - Math.max(low * p.maxTroops, reserve);
-  else if (p.neutralBorder > 0) budget = (p.troops - reserve) * CONFIG.ai.expandShare;
+  const keep = Math.max(low * p.maxTroops, reserve);
+  if (p.troopRatio > high) budget = p.troops - keep;
+  else if (p.neutralBorder > 0) budget = (p.troops - keep) * CONFIG.ai.expandShare;
   return Math.max(0, budget);
 }
 
@@ -56,23 +60,25 @@ export function scoreTargets(game: Game, p: Perception, bot: Bot): TargetScore[]
   const { profile, memory } = bot;
   const ai = CONFIG.ai;
 
-  // what each war neighbour could take from us while `budget` troops are away (insane's lookahead)
-  const counterRisk = (id: NationId): number => {
+  // the share of our land each other war could take while `sent` troops are away (insane's lookahead)
+  const counterRisk = (id: NationId, sent: number): number => {
     if (!profile.lookahead) return 0;
     let risk = 0;
     for (const w of p.wars) {
       if (w === id) continue;
-      const taken = estimateConquest(game, w, p.me, game.nations[w].troops, { defenderTroops: p.troops - budget });
+      const taken = estimateConquest(game, w, p.me, game.nations[w].troops, { defenderTroops: p.troops - sent });
       risk += (taken.tiles / Math.max(1, p.tiles)) * ai.counterRiskWeight;
     }
     return risk;
   };
 
+  // troops above the band are surplus (they grow little more there), so any gain beats keeping them
+  const minScore = p.troopRatio > profile.troopBand[1] ? 0 : ai.minAttackScore;
   const scores: TargetScore[] = [];
   const consider = (target: NationId, base: number, troops: number): void => {
-    let score = base - counterRisk(target);
+    let score = base * Math.max(0, 1 - counterRisk(target, troops));
     score *= 1 + profile.noise * (bot.rng.next() * 2 - 1);
-    if (score >= ai.minAttackScore && troops >= 1) scores.push({ target, score, troops });
+    if (score > 0 && score >= minScore && troops >= 1) scores.push({ target, score, troops });
   };
 
   if (p.neutralBorder > 0) {
@@ -91,7 +97,9 @@ export function scoreTargets(game: Game, p: Perception, bot: Bot): TargetScore[]
 /**
  * The troops worth sending at `target` now: what an attack along a front of `front` tiles can spend over
  * `paceMargin` of this bot's decision intervals (at the estimate's cost per tile), less the troops our running attack
- * on it already holds, and never more than `budget`. Troops parked in an attack don't grow, so sending more is waste.
+ * on it already holds, and never more than `budget`. Troops parked in an attack don't grow, so sending more is waste —
+ * unless troops fill `saturatedRatio` of the cap, where they barely grow either: then at least a
+ * `maxAttacksPerThink`-th of the budget goes.
  */
 function paced(
   game: Game, p: Perception, bot: Bot, target: NationId, front: number, est: ConquestEstimate, budget: number,
@@ -102,7 +110,9 @@ function paced(
   const useful = perTick * bot.profile.reactionTicks * CONFIG.ai.paceMargin * (est.attackerLoss / est.tiles);
   let committed = 0;
   for (const a of game.attacks) if (a.attacker === p.me && a.target === target) committed += a.troops;
-  return Math.min(budget, Math.max(0, useful - committed));
+  // saturated, troops at home are worth nothing: each target gets at least its share of the budget
+  const floor = p.troopRatio >= CONFIG.ai.saturatedRatio ? budget / CONFIG.ai.maxAttacksPerThink : 0;
+  return Math.min(budget, Math.max(floor, useful - committed));
 }
 
 /** The score of attacking neighbour `n` (allied or not) with the whole attack budget, without noise; 0 without one. */

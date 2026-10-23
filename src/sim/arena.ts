@@ -1,5 +1,6 @@
 import type { Difficulty, MapSize, NationId } from '../shared/types';
 import { generateRandomMap } from './map/randomMap';
+import type { Game } from './core/game';
 import { Match } from './match';
 import { maxTroops } from './systems/economy';
 
@@ -11,7 +12,7 @@ export interface ArenaSpec {
 }
 
 export interface ArenaResult {
-  /** The winning nation's difficulty (or, with no result by `maxTicks`, the largest nation's); null if no one holds land. */
+  /** See `winnerOf`. */
   winner: Difficulty | null;
   /** Every bot, most land first (ties: lower id first). */
   ranking: { id: NationId; difficulty: Difficulty; tiles: number }[];
@@ -62,13 +63,24 @@ export function runMatch(spec: ArenaSpec): ArenaResult {
     .filter((n) => n.difficulty !== null)
     .map((n) => ({ id: n.id, difficulty: n.difficulty as Difficulty, tiles: n.tiles }))
     .sort((a, b) => b.tiles - a.tiles || a.id - b.id);
-  let winner: Difficulty | null = null;
-  if (game.result) winner = game.nations[game.result.winners[0]].difficulty;
-  else if (ranking.length > 0 && ranking[0].tiles > 0) winner = ranking[0].difficulty;
+  const winner = winnerOf(game);
 
   const timeAtMaxShare = { easy: 0, normal: 0, hard: 0, insane: 0 };
   for (const d of DIFFICULTIES) timeAtMaxShare[d] = living[d] === 0 ? 0 : atMax[d] / living[d];
   return { winner, ranking, ticks: game.tick, timeAtMaxShare };
+}
+
+/**
+ * The difficulty credited with the game: the winner's, or with several winners (an alliance) the one holding the most
+ * land; with no result yet, the biggest nation's (lowest id on a tie). Null if no one holds land.
+ */
+export function winnerOf(game: Game): Difficulty | null {
+  const candidates = game.result
+    ? game.result.winners.map((id) => game.nations[id])
+    : game.nations.filter((n) => n.id !== 0 && n.difficulty !== null);
+  let best: (typeof candidates)[number] | null = null;
+  for (const n of candidates) if (best === null || n.tiles > best.tiles) best = n;
+  return best && (game.result || best.tiles > 0) ? best.difficulty : null;
 }
 
 /** `perTeam` bots of difficulty `a` against `perTeam` of `b`, once per seed. */

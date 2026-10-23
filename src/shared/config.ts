@@ -44,17 +44,19 @@ export const CONFIG = {
   },
   diplomacy: { requestTtlTicks: 300, defaultTrust: 0.5, betrayalTrustPenalty: 0.5, trustRecoveryPerTick: 0.0005 },
   ai: { buildingTileValue: 40, neutralBias: 1.5, minAttackScore: 0.01, secondFrontPenalty: 0.4, gangUpShare: 0.35,
-        counterRiskWeight: 2, minParaTroops: 2000, proposalCooldownTicks: 300, saveHorizonTicks: 300,
+        counterRiskWeight: 1, minParaTroops: 2000, proposalCooldownTicks: 300, saveHorizonTicks: 300,
         // shared-border tiles per neighbour whose defense multiplier perception averages
         defenseSamples: 16,
-        // reserve held per incoming attacking troop; share of a stronger neutral neighbour's troops treated as a threat
-        incomingReserve: 1.2, strongNeutralShare: 0.3,
+        // reserve held per incoming attacking troop; share of a stronger neutral neighbour's troops treated as a threat;
+        // the most of the troop cap a reserve may claim
+        incomingReserve: 1.2, strongNeutralShare: 0.3, reserveCap: 0.8,
         // share of the troops above the reserve sent into free land while inside the troop band
         expandShare: 0.5,
         // a counterattack sends this many troops per troop attacking us
         counterattackFactor: 1.1,
-        // an attack gets at most the troops it can spend in this many of the bot's decision intervals
-        paceMargin: 2,
+        // an attack gets at most the troops it can spend in this many of the bot's decision intervals, unless troops
+        // fill this share of the cap (saturated): then each target gets at least its share of the budget
+        paceMargin: 2, saturatedRatio: 0.9,
         // most attacks a bot starts or tops up in one decision
         maxAttacksPerThink: 3,
         // spawn choice: landmass size worth full marks (and their weight), spacing multiples worth full marks, the

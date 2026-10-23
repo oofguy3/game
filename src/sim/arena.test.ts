@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { headToHead, runMatch } from './arena';
+import { makeTestGame } from './testing/fixtures';
+import { headToHead, runMatch, winnerOf } from './arena';
 
 describe('arena', () => {
   it('runMatch finishes and ranks every bot', () => {
@@ -20,6 +21,17 @@ describe('arena', () => {
       expect(share).toBeGreaterThanOrEqual(0);
       expect(share).toBeLessThanOrEqual(1);
     }
+  });
+
+  it('credits a shared win to the biggest winner, and a timeout to the biggest nation', () => {
+    const g = makeTestGame({
+      map: ['##########'], owners: ['abbbbbccdd'], nations: [{}, {}, {}, {}], difficulties: ['easy', 'insane', 'hard', 'normal'],
+    });
+    expect(winnerOf(g)).toBe('insane');
+    g.result = { winners: [1, 3], reason: 'alliance' };
+    expect(winnerOf(g)).toBe('hard');
+    g.result = { winners: [4], reason: 'landShare' };
+    expect(winnerOf(g)).toBe('normal');
   });
 
   it('is deterministic per seed', () => {
