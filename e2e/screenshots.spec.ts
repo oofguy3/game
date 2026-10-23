@@ -13,14 +13,14 @@ const find = (page: Page, kind: Parameters<typeof window.__test.findLandTile>[0]
   page.evaluate((k) => window.__test.findLandTile(k)!, kind);
 
 test('title screen', async ({ page }) => {
-  await page.goto('/game/?test=1');
+  await page.goto('/game/?test=1&look=gl');
   await expect(page.locator('canvas.backdrop')).toHaveCount(1);
   await page.waitForTimeout(3000); // the world map loads behind the menu
   await page.screenshot({ path: `${OUT}/1-menu.png` });
 });
 
 test('the world map at the start', async ({ page }) => {
-  await page.goto('/game/?autostart=1&test=1&map=world&bots=16&difficulty=normal&seed=3');
+  await page.goto('/game/?autostart=1&test=1&look=gl&map=world&bots=16&difficulty=normal&seed=3');
   await page.waitForFunction(() => window.__test?.state.phase === 'spawn');
   await page.waitForFunction(() => [...window.__test.state.nations.values()].filter((n) => n.spawned).length >= 16);
   await page.waitForTimeout(1500);
@@ -29,7 +29,7 @@ test('the world map at the start', async ({ page }) => {
 
 test('a game in progress: territories, buildings, the right-click menu and diplomacy, and a close-up', async ({ page }) => {
   test.setTimeout(150_000);
-  await page.goto('/game/?autostart=1&test=1&map=random&size=small&seed=11&bots=6&difficulty=easy');
+  await page.goto('/game/?autostart=1&test=1&look=gl&map=random&size=small&seed=11&bots=6&difficulty=easy');
   await page.waitForFunction(() => window.__test?.state.phase === 'spawn');
   await page.waitForFunction(() => [...window.__test.state.nations.values()].filter((n) => n.spawned).length >= 6);
   await clickTile(page, await find(page, 'coastal-unowned'));
@@ -71,7 +71,7 @@ test('a game in progress: territories, buildings, the right-click menu and diplo
 });
 
 test('victory', async ({ page }) => {
-  await page.goto('/game/?autostart=1&test=1&map=random&size=small&seed=7&bots=4&difficulty=easy');
+  await page.goto('/game/?autostart=1&test=1&look=gl&map=random&size=small&seed=7&bots=4&difficulty=easy');
   await page.waitForFunction(() => window.__test?.state.phase === 'spawn');
   await clickTile(page, await find(page, 'unowned'));
   await page.waitForFunction(() => window.__test.state.phase === 'playing', null, { timeout: 20_000 });

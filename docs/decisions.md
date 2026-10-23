@@ -150,6 +150,7 @@ Design: `docs/superpowers/specs/2026-10-23-looks-and-sounds-design.md`. Plan: `d
 - The minimap uses the flat picture, not the graphics-chip look. — If wrong: the minimap looks simpler than the big map.
 - A lost WebGL context switches to the flat look for the rest of the match. — If wrong: rare; the game keeps working.
 - `?look=flat` stays for tests and comparisons. — If wrong: none.
+- A browser that only emulates the graphics chip (it refuses a context that must be fast) gets the flat look, which runs at 60 frames a second where the emulated map ran at about 20; `?look=gl` forces the graphics chip, and the browser tests use it. — If wrong: a machine whose real graphics chip the browser reports as slow gets the flat look.
 - Front lines show only between two nations; spreading into empty land doesn't count. — If wrong: less movement in the early game.
 
 **Rulings while building**

@@ -15,10 +15,11 @@ const ZOOM = 2.2;
 const ZOOM_SWING = 0.3;
 
 /**
- * The world map in the new look, with made-up nations, drifting slowly behind the title screen. Without WebGL2 (or if
- * the map can't load) `host` gets the `backdrop-fallback` class instead. Returns a function that stops it.
+ * The world map in the new look, with made-up nations, drifting slowly behind the title screen. Without WebGL2 on real
+ * graphics hardware (unless `allowSoftware`), or if the map can't load, `host` gets the `backdrop-fallback` class
+ * instead. Returns a function that stops it.
  */
-export function startBackdrop(host: HTMLElement): () => void {
+export function startBackdrop(host: HTMLElement, allowSoftware = false): () => void {
   const canvas = h('canvas', { class: 'backdrop' });
   host.prepend(canvas);
   let stopped = false;
@@ -42,7 +43,7 @@ export function startBackdrop(host: HTMLElement): () => void {
       if (stopped) return;
       const { width, height, terrain } = map;
       const colors = new Map(Array.from({ length: NATIONS }, (_, i) => [i + 1, nationColor(i + 1, false)] as [number, number]));
-      gl = GlMap.create(canvas, buildTerrainLook(width, height, terrain, lookOptions({ kind: 'world' })), colors);
+      gl = GlMap.create(canvas, buildTerrainLook(width, height, terrain, lookOptions({ kind: 'world' })), colors, allowSoftware);
       if (!gl) {
         fallback();
         return;

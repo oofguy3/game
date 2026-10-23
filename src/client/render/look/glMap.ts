@@ -57,13 +57,15 @@ export class GlMap {
 
   /**
    * A map drawer on `canvas` for `look`, with nations in `colors`, or null when WebGL2 isn't available or the shaders
-   * don't build.
+   * don't build. Without `allowSoftware` it is also null where the browser only emulates the graphics chip (a blocked
+   * driver, a virtual machine): there this map runs at a few frames a second, and the flat look is smooth.
    */
-  static create(canvas: HTMLCanvasElement, look: TerrainLook, colors: Map<NationId, number>): GlMap | null {
+  static create(canvas: HTMLCanvasElement, look: TerrainLook, colors: Map<NationId, number>, allowSoftware = false): GlMap | null {
     let gl: WebGL2RenderingContext | null = null;
     try {
       gl = canvas.getContext('webgl2', {
         alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false,
+        failIfMajorPerformanceCaveat: !allowSoftware,
       });
     } catch {
       return null;

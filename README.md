@@ -10,8 +10,10 @@ opponents.
 
 The map is drawn by the graphics chip (WebGL2): natural land with forests, deserts, snow and shaded mountains, water
 that moves, nations laid over the land like tinted glass, glowing borders, a shimmer on land just captured, and pulsing
-front lines between nations at war. Computers without WebGL2 get the plain flat look (`?look=flat` forces it). The old
-look is kept for comparison in `docs/screenshots/*-before.png`.
+front lines between nations at war. Computers without WebGL2, or whose browser only emulates the graphics chip (a
+blocked driver, a virtual machine), get the plain flat look, which stays smooth there. `?look=flat` forces the flat
+look, and `?look=gl` forces the graphics chip even when it is emulated (the browser tests use it). The old look is kept
+for comparison in `docs/screenshots/*-before.png`.
 
 ## How to play
 

@@ -37,6 +37,8 @@ const HUD_GAP = 24;
 document.title = GAME_NAME;
 const params = new URLSearchParams(location.search);
 const testMode = params.get('test') === '1';
+/** ?look=gl draws the map with the graphics chip even where the browser only emulates it (slow, but testable). */
+const allowSoftwareGl = params.get('look') === 'gl';
 const app = h('div', { class: 'app' });
 document.body.append(app);
 
@@ -54,7 +56,7 @@ let stopBackdrop: (() => void) | null = null;
 if (params.get('autostart') === '1') start(optionsFromUrl(params));
 else {
   app.append(createMenu(start, testMode));
-  stopBackdrop = startBackdrop(app);
+  stopBackdrop = startBackdrop(app, allowSoftwareGl);
 }
 
 /** Match options from the URL (?map=random&size=small&seed=7&bots=4&difficulty=easy). */
@@ -135,7 +137,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   const colors = new Map(init.nations.map((n) => [n.id, n.color]));
   const gl = params.get('look') === 'flat'
     ? null
-    : GlMap.create(glCanvas, buildTerrainLook(init.width, init.height, init.terrain, init.look), colors);
+    : GlMap.create(glCanvas, buildTerrainLook(init.width, init.height, init.terrain, init.look), colors, allowSoftwareGl);
   if (!gl) glCanvas.remove();
   const renderer = new Renderer(canvas, state, camera, units, effects, gl);
   const send = (cmd: Command): void => bridge.send(cmd);
