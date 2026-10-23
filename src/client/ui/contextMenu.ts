@@ -35,7 +35,7 @@ const COAST_ONLY: readonly BuildingType[] = ['port', 'navalBase'];
  * - Send boat, on coastal land that isn't theirs;
  * - Bomb and Paratroopers, always, greyed out with the reason when they can't go;
  * - Build ▸, on their land; Build warship / Build fighter, at their own naval base / airport;
- * - Move nearest warship here, on water when they have a warship;
+ * - Move nearest warship here, on water: their nearest warship on that sea (greyed out when none is on it);
  * - Diplomacy with <owner>, on another nation's land.
  */
 export function menuEntries(ctx: MenuContext, tile: TileIndex): MenuEntry[] {
@@ -85,15 +85,21 @@ export function menuEntries(ctx: MenuContext, tile: TileIndex): MenuEntry[] {
   if (!land) {
     const x = tile % info.width;
     const y = Math.floor(tile / info.width);
+    const sea = info.waterBody[tile];
     let ship: { id: number; d: number } | null = null;
+    let any = false;
     for (const u of state.units) {
       if (u.owner !== me || u.type !== 'warship') continue;
+      any = true;
+      if (waterBodyNear(info, u.x, u.y) !== sea) continue;
       const d = Math.hypot(u.x - x, u.y - y);
       if (ship === null || d < ship.d) ship = { id: u.id, d };
     }
     if (ship) {
       const unitId = ship.id;
       entries.push({ label: 'Move nearest warship here', run: () => send({ type: 'moveUnit', nation: me, unitId, tile }) });
+    } else if (any) {
+      entries.push({ label: 'Move nearest warship here', disabled: true, detail: 'none on this sea' });
     }
   }
 
@@ -102,6 +108,28 @@ export function menuEntries(ctx: MenuContext, tile: TileIndex): MenuEntry[] {
     entries.push({ label: `Diplomacy with ${name}`, run: () => ctx.openDiplomacy(owner) });
   }
   return entries;
+}
+
+/**
+ * The water body a ship at (x, y) sails on: its tile's, or the nearest water within 2 tiles (a ship cutting a corner
+ * can sit over land between waypoints); -1 if none.
+ */
+function waterBodyNear(info: MapInfo, x: number, y: number): number {
+  const cx = Math.round(x);
+  const cy = Math.round(y);
+  for (let r = 0; r <= 2; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= info.width || ny >= info.height) continue;
+        const body = info.waterBody[ny * info.width + nx];
+        if (body >= 0) return body;
+      }
+    }
+  }
+  return -1;
 }
 
 /** A finished building of the player's of `type` on `tile` or right next to it (icons are bigger than tiles). */
