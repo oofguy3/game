@@ -21,6 +21,7 @@ html, body {
 }
 
 .app { position: fixed; inset: 0; }
+canvas.map-gl { position: absolute; inset: 0; display: block; pointer-events: none; }
 canvas.map { position: absolute; inset: 0; display: block; cursor: pointer; }
 canvas.map.placing { cursor: crosshair; }
 .hidden { display: none !important; }

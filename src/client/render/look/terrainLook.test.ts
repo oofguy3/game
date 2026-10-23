@@ -32,6 +32,12 @@ describe('buildTerrainLook', () => {
     expect(decodeCoast(l.coast[l.at(3, 4)])).toBeLessThan(-5);
   });
 
+  it('smoothing never moves a tile across the coast: a one-tile island stays land and a one-tile lake stays water', () => {
+    const l = build(grid(15, 7, (x, y) => (x === 3 && y === 3) || (x > 7 && !(x === 11 && y === 3)) ? '#' : '.'), look(10, -10));
+    expect(decodeCoast(l.coast[l.at(3, 3)])).toBeGreaterThan(0);
+    expect(decodeCoast(l.coast[l.at(11, 3)])).toBeLessThan(0);
+  });
+
   it('coast distance stops at ±COAST_RANGE', () => {
     const l = build(grid(60, 10, (x, y) => (x < 3 && y > 3 && y < 6 ? '#' : '.')), look(10, -10));
     expect(decodeCoast(l.coast[l.at(55, 5)])).toBeCloseTo(-COAST_RANGE, 1);
@@ -46,10 +52,19 @@ describe('buildTerrainLook', () => {
     expect(l.biome[4 * l.at(5, 39) + SNOW]).toBe(255);
   });
 
-  it('high mountains get snow caps even at the equator', () => {
-    const l = build(grid(21, 21, (x, y) => (x >= 6 && x <= 14 && y >= 6 && y <= 14 ? 'M' : '#')), look(5, -5));
-    expect(l.biome[4 * l.at(10, 10) + SNOW]).toBeGreaterThanOrEqual(200);
-    expect(l.biome[4 * l.at(1, 1) + SNOW]).toBe(0);
+  it('snow caps sit on some peaks of a high range even at the equator, never on its edges or the plains', () => {
+    const inRange = (x: number, y: number): boolean => x >= 5 && x <= 19 && y >= 5 && y <= 19;
+    const l = build(grid(25, 25, (x, y) => (inRange(x, y) ? 'M' : '#')), look(5, -5));
+    let peak = 0;
+    for (let y = 0; y < 25; y++) {
+      for (let x = 0; x < 25; x++) {
+        const snow = l.biome[4 * l.at(x, y) + SNOW];
+        const rim = inRange(x, y) && (x === 5 || x === 19 || y === 5 || y === 19);
+        if (!inRange(x, y) || rim) expect(snow).toBe(0);
+        else peak = Math.max(peak, snow);
+      }
+    }
+    expect(peak).toBeGreaterThanOrEqual(200);
   });
 
   it('never puts forest on beaches, snow or mountains', () => {

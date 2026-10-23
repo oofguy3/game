@@ -2,6 +2,7 @@ import { CONFIG } from '../shared/config';
 import type { Command, NationId, TileIndex } from '../shared/types';
 import type { Camera } from './camera';
 import type { MapInfo } from './mapInfo';
+import type { Renderer } from './render/renderer';
 import type { ClientState } from './state';
 
 export type FindKind = 'unowned' | 'player' | 'enemy' | 'coastal-unowned' | 'player-interior' | 'player-coastal'
@@ -17,6 +18,18 @@ export interface TestApi {
   send(cmd: Command): void;
   /** Gives the player gold and troops (a debug command; the match must run with ?test=1). */
   grant(amounts: { gold?: number; troops?: number }): void;
+  /** Whether the map is drawn by the graphics chip or as the flat picture. */
+  look(): 'gl' | 'flat';
+  /** The map's colour at the middle of `tile`, without buildings, units or labels on top. */
+  sampleMap(tile: number): [number, number, number];
+  /** The mean draw time of the recent frames, in ms, and how many frames that covers. */
+  frameStats(): { mean: number; frames: number };
+  /** Puts `tile` in the middle of the screen at exactly `zoom` (within the camera's limits). */
+  zoomTo(zoom: number, tile: number): void;
+  /** The water tile farthest from land. */
+  findWaterTile(): number | null;
+  /** The land tile farthest from water. */
+  findInlandTile(): number | null;
 }
 
 declare global {
@@ -35,6 +48,7 @@ const DISTANCE_SAMPLES = 600;
 /** Exposes hooks for the browser tests on `window.__test` (only with ?test=1). */
 export function installTestApi(
   state: ClientState, info: MapInfo, camera: Camera, canvas: HTMLCanvasElement, send: (cmd: Command) => void,
+  renderer: Renderer,
 ): void {
   const toPage = (tile: number): { x: number; y: number } => {
     const w = state.init.width;
@@ -53,7 +67,49 @@ export function installTestApi(
     findLandTile: (kind) => findLandTile(state, info, kind),
     send,
     grant: ({ gold, troops }) => send({ type: 'debugGrant', nation: state.init.playerId, gold, troops }),
+    look: () => renderer.look,
+    sampleMap(tile) {
+      const w = state.init.width;
+      const p = camera.tileToScreen((tile % w) + 0.5, Math.floor(tile / w) + 0.5);
+      return renderer.sample(p.x, p.y);
+    },
+    frameStats() {
+      const frames = renderer.frameMs;
+      return { mean: frames.reduce((s, t) => s + t, 0) / Math.max(1, frames.length), frames: frames.length };
+    },
+    zoomTo(zoom, tile) {
+      const w = state.init.width;
+      camera.lookAt((tile % w) + 0.5, Math.floor(tile / w) + 0.5, zoom);
+    },
+    findWaterTile: () => farthestTile(info, 'water'),
+    findInlandTile: () => farthestTile(info, 'land'),
   };
+}
+
+/** The tile of `kind` farthest (in 4-neighbour steps) from every tile of the other kind; null when there is none. */
+export function farthestTile(info: MapInfo, kind: 'water' | 'land'): TileIndex | null {
+  const n = info.width * info.height;
+  const mine = (t: TileIndex): boolean => info.isLand(t) === (kind === 'land');
+  const dist = new Int32Array(n).fill(-1);
+  const queue: TileIndex[] = [];
+  for (let t = 0; t < n; t++) {
+    if (mine(t)) continue;
+    dist[t] = 0;
+    queue.push(t);
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const t = queue[i];
+    for (const m of info.neighbors(t)) {
+      if (dist[m] !== -1) continue;
+      dist[m] = dist[t] + 1;
+      queue.push(m);
+    }
+  }
+  let best: TileIndex | null = null;
+  for (let t = 0; t < n; t++) {
+    if (mine(t) && (best === null || dist[t] > dist[best] || (dist[best] !== -1 && dist[t] === -1))) best = t;
+  }
+  return best;
 }
 
 /**

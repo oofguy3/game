@@ -6,6 +6,8 @@ import { Camera } from './camera';
 import { Controls } from './input';
 import { MapInfo } from './mapInfo';
 import { Effects } from './render/effects';
+import { GlMap } from './render/look/glMap';
+import { buildTerrainLook } from './render/look/terrainLook';
 import { Renderer } from './render/renderer';
 import { UnitInterpolator } from './render/units';
 import { ClientState } from './state';
@@ -56,9 +58,10 @@ function backToMenu(): void {
 
 function start(options: StartOptions): void {
   app.replaceChildren();
+  const glCanvas = h('canvas', { class: 'map-gl' });
   const canvas = h('canvas', { class: 'map' });
   const loading = h('div', { class: 'banner', text: 'Building the world…' });
-  app.append(canvas, loading);
+  app.append(glCanvas, canvas, loading);
   const state = new ClientState();
   let ui: { update(): void } | null = null;
 
@@ -66,7 +69,7 @@ function start(options: StartOptions): void {
     onInit(init: InitPayload) {
       state.applyInit(init);
       loading.remove();
-      ui = buildGame(canvas, state, bridge);
+      ui = buildGame(canvas, glCanvas, state, bridge);
     },
     onUpdate(update: GameUpdate) {
       if (!state.init) return;
@@ -83,12 +86,17 @@ function start(options: StartOptions): void {
   });
 }
 
-/** Sets up the camera, renderer, panels and controls once the match exists; returns what to refresh on updates. */
-function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBridge): { update(): void } {
+/**
+ * Sets up the camera, renderer, panels and controls once the match exists; returns what to refresh on updates. The map
+ * is drawn by the graphics chip on `glCanvas` unless that isn't available or the URL asks for ?look=flat.
+ */
+function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state: ClientState, bridge: SimBridge): { update(): void } {
   const { init } = state;
   const size = (): void => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    for (const c of [canvas, glCanvas]) {
+      c.width = window.innerWidth;
+      c.height = window.innerHeight;
+    }
   };
   size();
   const camera = new Camera(canvas.width, canvas.height, init.width, init.height);
@@ -100,9 +108,13 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
   const units = new UnitInterpolator();
   const effects = new Effects(state);
   state.onEvents = (events) => effects.onEvents(events, performance.now());
-  const renderer = new Renderer(canvas, state, camera, units, effects);
   const names = new Map(init.nations.map((n) => [n.id, n.name]));
   const colors = new Map(init.nations.map((n) => [n.id, n.color]));
+  const gl = params.get('look') === 'flat'
+    ? null
+    : GlMap.create(glCanvas, buildTerrainLook(init.width, init.height, init.terrain, init.look), colors);
+  if (!gl) glCanvas.remove();
+  const renderer = new Renderer(canvas, state, camera, units, effects, gl);
   const send = (cmd: Command): void => bridge.send(cmd);
   let land = 0;
   for (const t of init.terrain) if (t !== 0) land++;
@@ -145,7 +157,7 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
       return open;
     },
   });
-  if (testMode) installTestApi(state, info, camera, canvas, send);
+  if (testMode) installTestApi(state, info, camera, canvas, send, renderer);
 
   let last = performance.now();
   const loop = (now: number): void => {

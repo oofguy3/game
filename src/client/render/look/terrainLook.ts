@@ -7,12 +7,20 @@ import type { LookOptions } from '../../../worker/protocol';
 export const COAST_RANGE = 8;
 /** Forests stay at least this far (tiles) from the coastline, leaving the beaches bare. */
 const FOREST_COAST_GAP = 1.5;
+/** After smoothing, a tile's coast distance keeps its sign at least this far from zero, so no tile changes sides. */
+const MIN_COAST = 0.15;
 /** Base height of each terrain type before noise and smoothing. */
 const BASE_HEIGHT = [0, 0.2, 0.5, 0.9];
 const HEIGHT_NOISE = 0.08;
 const BLUR_RADIUS = 2;
-/** Mountains whose smoothed height reaches this get a snow cap at any latitude. */
-const SNOW_CAP_HEIGHT = 0.72;
+/** Ridges added to mountains (and gentler swells to hills) after smoothing, so the shading picks out ranges. */
+const RIDGE = 0.16;
+const SWELL = 0.06;
+/** Mountains get a snow cap at any latitude, from none at this height to full at SNOW_CAP_FULL: the ridge tops. */
+const SNOW_CAP_FROM = 0.9;
+const SNOW_CAP_FULL = 1.0;
+/** How many degrees the snow line wanders north and south, so it isn't a straight edge. */
+const SNOW_LINE_WOBBLE = 4;
 /** Snow ramps from none at SNOW_FROM° to full at SNOW_FULL°. */
 const SNOW_FROM = 58;
 const SNOW_FULL = 68;
@@ -59,16 +67,25 @@ export function buildTerrainLook(width: number, height: number, terrain: Uint8Ar
   const dryNoise = createNoise2D(random);
   const forestNoise = createNoise2D(random);
   const forestDetail = createNoise2D(random);
+  const ridgeNoise = createNoise2D(random);
+  const swellNoise = createNoise2D(random);
+  const snowLineNoise = createNoise2D(random);
 
-  // signed distance to the coastline: land measures to the nearest water, water to the nearest land
+  // signed distance to the coastline (land measures to the nearest water, water to the nearest land), smoothed once
+  // so the drawn coast curves instead of following the tiles' steps, without letting any tile change sides
   const toWater = distances(width, height, (t) => terrain[t] === Terrain.Water);
   const toLand = distances(width, height, (t) => terrain[t] !== Terrain.Water);
   const coastDistance = new Float32Array(n);
-  const coast = new Uint8Array(n);
   for (let t = 0; t < n; t++) {
     const s = terrain[t] === Terrain.Water ? -(toLand[t] - 0.5) : toWater[t] - 0.5;
     coastDistance[t] = clamp(s, -COAST_RANGE, COAST_RANGE);
-    coast[t] = encodeCoast(s);
+  }
+  boxBlur(coastDistance, width, height, 1);
+  const coast = new Uint8Array(n);
+  for (let t = 0; t < n; t++) {
+    if (terrain[t] === Terrain.Water) coastDistance[t] = Math.min(-MIN_COAST, coastDistance[t]);
+    else coastDistance[t] = Math.max(MIN_COAST, coastDistance[t]);
+    coast[t] = encodeCoast(coastDistance[t]);
   }
 
   // a smoothed height field for the shading and the snow caps
@@ -81,13 +98,18 @@ export function buildTerrainLook(width: number, height: number, terrain: Uint8Ar
   }
   boxBlur(heights, width, height, BLUR_RADIUS);
   boxBlur(heights, width, height, BLUR_RADIUS);
+  for (let t = 0; t < n; t++) {
+    const x = t % width;
+    const y = (t - x) / width;
+    if (terrain[t] === Terrain.Mountains) heights[t] += RIDGE * (0.5 - Math.abs(ridgeNoise(x / 6, y / 6)));
+    else if (terrain[t] === Terrain.Hills) heights[t] += SWELL * swellNoise(x / 8, y / 8);
+  }
 
   const shade = new Uint8Array(n);
   const biome = new Uint8Array(4 * n);
   const { top, bottom } = look.latitude;
   for (let y = 0; y < height; y++) {
     const lat = Math.abs(top + ((bottom - top) * (y + 0.5)) / height);
-    const latSnow = clamp((lat - SNOW_FROM) / (SNOW_FULL - SNOW_FROM), 0, 1);
     const band = smoothstep(12, 20, lat) * (1 - smoothstep(30, 38, lat));
     for (let x = 0; x < width; x++) {
       const t = y * width + x;
@@ -101,7 +123,10 @@ export function buildTerrainLook(width: number, height: number, terrain: Uint8Ar
       const dy = heights[Math.min(height - 1, y + 1) * width + x] - heights[Math.max(0, y - 1) * width + x];
       shade[t] = Math.round(clamp(128 + (dx + dy) * SHADE_STRENGTH, 0, 255));
 
-      const snow = kind === Terrain.Mountains && heights[t] >= SNOW_CAP_HEIGHT ? 1 : latSnow;
+      const wobble = snowLineNoise(x / 25, y / 25) * SNOW_LINE_WOBBLE;
+      const latSnow = clamp((lat + wobble - SNOW_FROM) / (SNOW_FULL - SNOW_FROM), 0, 1);
+      const cap = kind === Terrain.Mountains ? smoothstep(SNOW_CAP_FROM, SNOW_CAP_FULL, heights[t]) : 0;
+      const snow = Math.max(cap, latSnow);
       const dryRaw = dryNoise(x / 40, y / 40);
       let dry = look.dryBands ? clamp(band * 0.85 + (dryRaw - 0.1) * 0.35, 0, 1) : clamp((dryRaw - 0.35) * 1.5, 0, 1);
       if (snow > 0.5) dry = 0;

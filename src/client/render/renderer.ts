@@ -4,6 +4,7 @@ import { formatNumber } from '../format';
 import type { ClientState } from '../state';
 import type { Effects } from './effects';
 import { drawBuildingIcon } from './icons';
+import type { GlMap, GlView } from './look/glMap';
 import { css, TERRAIN_COLORS } from './palette';
 import { TerritoryLayer } from './territoryLayer';
 import { drawUnits } from './units';
@@ -12,8 +13,13 @@ import type { UnitInterpolator } from './units';
 /** Labels smaller than this many pixels are hidden. */
 const MIN_LABEL_PX = 8;
 const MAX_LABEL_PX = 64;
+/** How many recent frame times `frameMs` keeps. */
+const FRAME_HISTORY = 240;
 
-/** Draws the map, buildings, units, nation names and effects onto the game canvas, every frame. */
+/**
+ * Draws the game every frame. The map comes from the graphics chip (`gl`, on its own canvas underneath) while it
+ * works, else from the flat territory picture on this canvas; buildings, units, nation names and effects go on top.
+ */
 export class Renderer {
   private layer: TerritoryLayer | null = null;
   private offscreen: HTMLCanvasElement | null = null;
@@ -21,6 +27,8 @@ export class Renderer {
   private colors = new Map<NationId, number>();
   private names = new Map<NationId, string>();
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly frames: number[] = [];
+  private grey = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -28,25 +36,52 @@ export class Renderer {
     private readonly camera: Camera,
     private readonly units: UnitInterpolator,
     private readonly effects: Effects,
+    private readonly gl: GlMap | null = null,
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D is not available');
     this.ctx = ctx;
   }
 
+  /** Whether the map is being drawn by the graphics chip ('gl') or as the flat picture ('flat'). */
+  get look(): 'gl' | 'flat' {
+    return this.gl !== null && !this.gl.lost ? 'gl' : 'flat';
+  }
+
+  /** How long the last frames took to draw, in ms, oldest first. */
+  get frameMs(): readonly number[] {
+    return this.frames;
+  }
+
+  /** The flat territory picture, one pixel per tile, kept up to date in both looks. */
+  territoryImage(): HTMLCanvasElement {
+    this.syncTerritory();
+    return this.offscreen!;
+  }
+
+  /** The map's colour under canvas point (sx, sy), without anything drawn on top of it. */
+  sample(sx: number, sy: number): [number, number, number] {
+    if (!this.state.init) return [0, 0, 0];
+    this.syncTerritory();
+    if (this.look === 'gl') return this.gl!.sample(this.view(performance.now()), sx, sy);
+    this.drawFlatMap();
+    const d = this.ctx.getImageData(Math.floor(sx), Math.floor(sy), 1, 1).data;
+    return [d[0], d[1], d[2]];
+  }
+
   draw(): void {
     const { state, ctx, camera } = this;
     if (!state.init) return;
+    const start = performance.now();
     this.syncTerritory();
-    const z = camera.zoom;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = css(TERRAIN_COLORS[0]);
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.imageSmoothingEnabled = false;
-    const { width, height } = state.init;
-    ctx.drawImage(this.offscreen!, -camera.x * z, -camera.y * z, width * z, height * z);
+    if (this.look === 'gl') {
+      ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.gl!.draw(this.view(start));
+    } else this.drawFlatMap();
+    const { width } = state.init;
 
-    const iconSize = Math.min(28, Math.max(7, z * 2.4));
+    const iconSize = Math.min(28, Math.max(7, camera.zoom * 2.4));
     for (const b of state.buildings) {
       const p = camera.tileToScreen((b.tile % width) + 0.5, Math.floor(b.tile / width) + 0.5);
       if (!this.onScreen(p.x, p.y, iconSize)) continue;
@@ -56,6 +91,25 @@ export class Renderer {
     drawUnits(ctx, camera, this.units, this.colors, now, iconSize, (x, y) => this.onScreen(x, y, iconSize));
     this.drawLabels();
     this.effects.draw(ctx, camera, now, this.canvas.width, this.canvas.height);
+    this.frames.push(performance.now() - start);
+    if (this.frames.length > FRAME_HISTORY) this.frames.shift();
+  }
+
+  private view(now: number): GlView {
+    const { camera } = this;
+    return { x: camera.x, y: camera.y, zoom: camera.zoom, time: now / 1000, grey: this.grey };
+  }
+
+  /** Today's flat look: water everywhere, then the territory picture scaled up without smoothing. */
+  private drawFlatMap(): void {
+    const { ctx, camera } = this;
+    const { width, height } = this.state.init;
+    const z = camera.zoom;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = css(TERRAIN_COLORS[0]);
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.offscreen!, -camera.x * z, -camera.y * z, width * z, height * z);
   }
 
   /** Creates the territory image on first use, then repaints the tiles whose owner changed. */
