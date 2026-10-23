@@ -5,6 +5,7 @@ import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
 import { scaledTicks } from '../core/tuning';
 import { distance, isLand, tileOf, xOf, yOf } from '../map/grid';
+import { fallCapital } from './capitals';
 
 export interface Building {
   id: number;
@@ -125,12 +126,13 @@ export function buildingCost(game: Game, nation: NationId, type: BuildingType): 
 
 /**
  * Whether `nation` may put a building of `type` on `tile`. The checks run in this order, and the first that fails
- * gives the reason: the tile is on the map, it is land, the rules allow planes (plane buildings only), the nation owns
- * it, it is coastal (ports and naval bases only), no building of any owner stands within `minSpacing` (Chebyshev
- * distance), and the nation can afford it. Changes nothing.
+ * gives the reason: the type can be built at all (a capital can't), the tile is on the map, it is land, the rules
+ * allow planes (plane buildings only), the nation owns it, it is coastal (ports and naval bases only), no building of
+ * any owner stands within `minSpacing` (Chebyshev distance), and the nation can afford it. Changes nothing.
  */
 export function canPlace(game: Game, nation: NationId, type: BuildingType, tile: TileIndex): CommandResult {
   const { map } = game;
+  if (type === 'capital') return fail('not buildable');
   if (!Number.isInteger(tile) || tile < 0 || tile >= map.width * map.height) return fail('off the map');
   if (!isLand(map, tile)) return fail('not land');
   if (!game.tuning.planes && PLANE_BUILDINGS.includes(type)) return fail('no planes');
@@ -175,13 +177,18 @@ export function stepBuildings(game: Game): void {
 /**
  * The `onOwnerChange` hook: a building on a tile taken by another nation changes hands, its active count moving with
  * it, and `buildingCaptured` is emitted; one under construction keeps counting down for its new owner. A building on a
- * tile left unowned is destroyed.
+ * tile left unowned is destroyed. A capital taken by another nation falls instead (`fallCapital`). A building that is
+ * already the new owner's (handed over with a fallen capital) is left as it is.
  */
 export function onTileCaptured(game: Game, tile: TileIndex, from: NationId, to: NationId): void {
   const b = game.buildings.at(tile);
-  if (!b) return;
+  if (!b || b.owner === to) return;
   if (to === 0) {
     destroyBuilding(game, b.id, 0);
+    return;
+  }
+  if (b.type === 'capital') {
+    fallCapital(game, from, to);
     return;
   }
   game.buildings.transfer(b.id, to);

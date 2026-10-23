@@ -8,6 +8,7 @@ import { distance, isLand, tileOf, xOf, yOf } from '../map/grid';
 import { landTroops } from './attacks';
 import { buildingsInRadius, destroyBuilding } from './buildings';
 import type { Building } from './buildings';
+import { nearEnemyCapital } from './capitals';
 import { density } from './combat';
 import { payTrade } from './naval';
 import { canTrade, declareWar } from './relations';
@@ -72,9 +73,9 @@ export function launchBomber(game: Game, nation: NationId, tile: TileIndex): Com
 }
 
 /**
- * Drops paratroopers on `tile` (land that isn't ours or an ally's) from `nation`'s nearest ready airport in range:
- * floor(min(ratio, `maxTroopsShare`) × troops) jump, for `paraPlane.cost` gold. Landing starts an attack from there.
- * Refused when the rules have no planes.
+ * Drops paratroopers on `tile` (land that isn't ours or an ally's, nor within `landingClearance` of another nation's
+ * capital) from `nation`'s nearest ready airport in range: floor(min(ratio, `maxTroopsShare`) × troops) jump, for
+ * `paraPlane.cost` gold. Landing starts an attack from there. Refused when the rules have no planes.
  */
 export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex, ratio: number): CommandResult {
   if (!game.tuning.planes) return fail('no planes');
@@ -83,6 +84,7 @@ export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex
   const owner = game.owner[tile];
   if (owner === nation) return fail('own tile');
   if (owner !== 0 && game.relations.get(nation, owner) === 'allied') return fail('allied');
+  if (nearEnemyCapital(game, nation, tile)) return fail('too close to a capital');
   const airport = missionAirport(game, nation, tile);
   if (typeof airport === 'string') return fail(airport);
   const { cost, cooldownTicks, hp, maxTroopsShare } = CONFIG.units.paraPlane;

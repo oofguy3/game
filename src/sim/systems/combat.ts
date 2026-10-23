@@ -17,11 +17,12 @@ export function density(n: Nation): number {
   return n.troops / Math.max(1, n.tiles);
 }
 
-const DEFENSE_TYPES = ['defensePost', 'fortress'] as const;
+const DEFENSE_TYPES = ['defensePost', 'fortress', 'capital'] as const;
 
 /**
  * How much defense buildings multiply the cost of taking `tile`: the largest `multiplier` among the tile owner's active
- * defense posts and fortresses whose `radius` reaches it. They don't stack; with none in range, or on unowned land, 1.
+ * defense posts, fortresses and capital whose `radius` reaches it. They don't stack; with none in range, or on unowned
+ * land, 1.
  */
 export function defenseMultiplier(game: Game, tile: TileIndex): number {
   const owner = game.owner[tile];

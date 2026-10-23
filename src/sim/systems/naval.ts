@@ -8,6 +8,7 @@ import { distance, forEachNeighbor, isLand, tileOf, xOf, yOf } from '../map/grid
 import { adjacentWater, findWaterPath } from '../map/waterNav';
 import { landTroops } from './attacks';
 import type { Building } from './buildings';
+import { nearEnemyCapital } from './capitals';
 import { tradeMultiplier } from './economy';
 import { canTrade, declareWar } from './relations';
 import { advanceAlongPath, countUnits, pathLength, removeUnit, spawnUnit } from './units';
@@ -22,8 +23,9 @@ export function boatCap(game: Game, n: Nation): number {
 
 /**
  * Sends a troop boat carrying `troops` from `nation`'s nearest suitable coast to land on `target`: coastal land that
- * isn't the nation's own or an ally's, reached over a water body the nation's coast touches. The troops leave the
- * pool now; landing on someone's land declares war. Reports the reason on failure without emitting `rejected`.
+ * isn't the nation's own or an ally's, nor within `landingClearance` of another nation's capital, reached over a water
+ * body the nation's coast touches. The troops leave the pool now; landing on someone's land declares war. Reports the
+ * reason on failure without emitting `rejected`.
  */
 export function launchBoat(game: Game, nation: NationId, target: TileIndex, troops: number): CommandResult {
   const { map } = game;
@@ -33,6 +35,7 @@ export function launchBoat(game: Game, nation: NationId, target: TileIndex, troo
   if (owner === nation) return fail('own tile');
   if (owner !== 0 && game.relations.get(nation, owner) === 'allied') return fail('allied');
   if (map.coastal[target] === 0) return fail('not coastal');
+  if (nearEnemyCapital(game, nation, target)) return fail('too close to a capital');
   if (!(troops >= 1)) return fail('not enough troops');
   const n = game.nations[nation];
   if (countUnits(game, nation, 'troopBoat') >= boatCap(game, n)) return fail('too many boats out');

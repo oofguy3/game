@@ -12,6 +12,7 @@ import type { WaterNav } from '../map/waterNav';
 import { stepAttacks } from '../systems/attacks';
 import type { Attack } from '../systems/attacks';
 import { BuildingStore, onTileCaptured, stepBuildings } from '../systems/buildings';
+import { noteCapitalThreat } from '../systems/capitals';
 import { stepDiplomacy } from '../systems/diplomacy';
 import { stepEconomy } from '../systems/economy';
 import { Relations } from '../systems/relations';
@@ -94,6 +95,8 @@ export class Game {
   readonly requests = new Map<number, DiplomacyRequest>();
   /** The tick of each nation's last ask of a teammate (for aid or a joint attack), keyed `from × nations.length + to`. */
   readonly asks = new Map<number, number>();
+  /** The tick of each nation's last warning that its capital is under attack. */
+  readonly lastThreat = new Map<NationId, number>();
   /** Boats, ships and planes by id, in the order they were created. */
   readonly units = new Map<number, Unit>();
   /** Called after each ownership change, once the game state is already updated. */
@@ -139,6 +142,7 @@ export class Game {
     if (this.rules.mode === 'teams') this.formTeams(setup);
     this.spawnSpacing = spawnSpacingFor(setup.map.landCount, this.nations.length - 1);
     this.onOwnerChange.push((tile, from, to) => onTileCaptured(this, tile, from, to));
+    if (this.tuning.capitals) this.onOwnerChange.push((tile, from, to) => noteCapitalThreat(this, tile, from, to));
   }
 
   /** A fresh id for buildings, units, requests and the like; ids start at 1. */

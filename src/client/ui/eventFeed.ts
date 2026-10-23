@@ -35,7 +35,10 @@ export class EventFeed {
   }
 }
 
-/** Whether `e` is a threat to player `me`, shown in red: planes on radar, attacks and bombs on them, betrayal. */
+/**
+ * Whether `e` is a threat to player `me`, shown in red: planes on radar, attacks and bombs on them, betrayal, their
+ * capital under attack or fallen.
+ */
 export function isAlarm(e: GameEvent, me: NationId): boolean {
   switch (e.type) {
     case 'radarWarning':
@@ -46,6 +49,9 @@ export function isAlarm(e: GameEvent, me: NationId): boolean {
       return e.owner === me;
     case 'betrayal':
       return e.victim === me;
+    case 'capitalThreat':
+    case 'capitalFell':
+      return e.nation === me;
     default:
       return false;
   }

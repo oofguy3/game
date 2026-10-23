@@ -2,7 +2,7 @@ import { CONFIG } from '../../shared/config';
 import type { AttackSupport, Command, NationId, TileIndex } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
-import { forEachNeighbor, isLand } from '../map/grid';
+import { distance, forEachNeighbor, isLand } from '../map/grid';
 import { MaxHeap } from '../util/heap';
 import { defenderLossPerTile, isTargetTile, tileCaptureCost } from './combat';
 import { launchBoat } from './naval';
@@ -21,6 +21,19 @@ export interface Attack {
   queued: Map<TileIndex, number>;
   /** Speed points carried between ticks; negative while a costly tile is still being paid off. */
   progress: number;
+  /** The tile the attack presses toward (capitals only); null for none. */
+  aim: TileIndex | null;
+}
+
+export interface StartAttackOptions {
+  /** A beachhead the attacker holds, to attack from even without a shared border. */
+  seedTile?: TileIndex;
+  /** Attack from the seed tile only (paratroopers), not the whole border. */
+  seedOnly?: boolean;
+  /** The teammate the attack helps (already checked), told with `attackStarted`. */
+  support?: AttackSupport;
+  /** The tile to press toward, null for none; joining a running attack sets its aim when given. */
+  aim?: TileIndex | null;
 }
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
@@ -37,16 +50,16 @@ export function sharesBorder(game: Game, a: NationId, b: NationId): boolean {
  * Sends `troops` from `attacker`'s pool against `target` (0 = unowned land). Rejected for the attacker itself, an
  * ally, a target with no shared border unless a `seedTile` (a beachhead the attacker holds) is given, and fewer than
  * one troop. The troops first cancel out against any attack the target has running against the attacker, both sides
- * losing the smaller amount; what is left joins the attacker's existing attack on the target, or starts a new one.
- * Either way every target tile touching the attacker's border or the seed tile joins the frontier, so land that has
- * come within reach since an attack began is taken too; with `seedOnly` (paratroopers) only the seed tile's. Attacking a nation declares war on it. Reports the reason on
- * failure without emitting `rejected`; `applyCommand` does that. `support` (already checked) goes out with
- * `attackStarted`.
+ * losing the smaller amount; what is left joins the attacker's existing attack on the target (setting its aim, when
+ * one is given), or starts a new one. Either way every target tile touching the attacker's border or the seed tile
+ * joins the frontier, so land that has come within reach since an attack began is taken too; with `seedOnly`
+ * (paratroopers) only the seed tile's. Attacking a nation declares war on it. Reports the reason on failure without
+ * emitting `rejected`; `applyCommand` does that. `support` (already checked) goes out with `attackStarted`.
  */
 export function startAttack(
-  game: Game, attacker: NationId, target: NationId, troops: number, seedTile?: TileIndex, seedOnly = false,
-  support?: AttackSupport,
+  game: Game, attacker: NationId, target: NationId, troops: number, opts: StartAttackOptions = {},
 ): CommandResult {
+  const { seedTile, seedOnly = false, support, aim } = opts;
   if (target === attacker) return fail('own tile');
   if (target !== 0 && game.relations.get(attacker, target) === 'allied') return fail('allied');
   if (seedTile === undefined && !sharesBorder(game, attacker, target)) return fail('not adjacent');
@@ -62,9 +75,11 @@ export function startAttack(
   let attack = game.attacks.find((a) => a.attacker === attacker && a.target === target);
   if (attack) {
     attack.troops += remaining;
+    if (aim !== undefined) attack.aim = aim;
   } else {
     attack = {
       id: game.nextId(), attacker, target, troops: remaining, frontier: new MaxHeap(), queued: new Map(), progress: 0,
+      aim: aim ?? null,
     };
     game.attacks.push(attack);
   }
@@ -75,10 +90,10 @@ export function startAttack(
 
 /**
  * The `attack` command: attacks the owner of `cmd.tile` (or spreads into unowned land) with
- * floor(troops × ratio) troops, the ratio clamped to [`minAttackRatio`, 1]. With `allowBoat`, a target out of reach
- * over land is attacked by boat, landing on its nearest beach or free beach ('no beach' when there's none in reach).
- * The command's `support` goes out with `attackStarted` when its ally is a living teammate; otherwise it is dropped
- * and the attack goes ahead without it.
+ * floor(troops × ratio) troops, the ratio clamped to [`minAttackRatio`, 1]. With capitals the attack presses toward
+ * `cmd.tile`. With `allowBoat`, a target out of reach over land is attacked by boat, landing on its nearest beach or
+ * free beach ('no beach' when there's none in reach). The command's `support` goes out with `attackStarted` when its
+ * ally is a living teammate; otherwise it is dropped and the attack goes ahead without it.
  */
 export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack' }>): CommandResult {
   const { map } = game;
@@ -94,7 +109,7 @@ export function attackCommand(game: Game, cmd: Extract<Command, { type: 'attack'
     return beach === null ? fail('no beach') : launchBoat(game, cmd.nation, beach, troops);
   }
   const support = checkedSupport(game, cmd.nation, cmd.support);
-  return startAttack(game, cmd.nation, target, troops, undefined, false, support);
+  return startAttack(game, cmd.nation, target, troops, { support, aim: game.tuning.capitals ? tile : null });
 }
 
 /** `support` as `attacker` may claim it — well formed, for a living teammate — or undefined. */
@@ -170,7 +185,9 @@ export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops
   const rest = troops - cost;
   // the rest joins the pool; a new attack draws it straight back out
   lander.troops += rest;
-  if (rest >= 1 && (owner === 0 || game.nations[owner].alive)) startAttack(game, nation, owner, rest, tile, seedOnly);
+  if (rest >= 1 && (owner === 0 || game.nations[owner].alive)) {
+    startAttack(game, nation, owner, rest, { seedTile: tile, seedOnly });
+  }
 }
 
 /**
@@ -217,8 +234,8 @@ function advance(game: Game, attack: Attack): boolean {
 }
 
 /**
- * Gives `tile` to `attacker`: its owner loses troops for it first, and is eliminated if it was the last tile.
- * Elimination drops the loser's own attacks, troops and all.
+ * Gives `tile` to `attacker`: its owner loses troops for it first, and is eliminated if it was the last tile (unless
+ * it is out already, its capital having fallen with the tile).
  */
 function captureTile(game: Game, attacker: NationId, tile: TileIndex): void {
   const from = game.owner[tile];
@@ -228,12 +245,17 @@ function captureTile(game: Game, attacker: NationId, tile: TileIndex): void {
   }
   game.setOwner(tile, attacker);
   game.nations[attacker].stats.tilesCaptured++;
-  if (from !== 0 && game.nations[from].tiles === 0) {
-    game.nations[from].alive = false;
-    removeAttacks(game, (a) => a.attacker === from);
-    for (const [id, u] of game.units) if (u.owner === from) game.units.delete(id);
+  if (from !== 0 && game.nations[from].alive && game.nations[from].tiles === 0) {
+    knockOut(game, from);
     game.emit({ type: 'eliminated', nation: from, by: attacker });
   }
+}
+
+/** Puts `nation` out of the game: it is no longer alive, and its own attacks (troops and all) and units are gone. */
+export function knockOut(game: Game, nation: NationId): void {
+  game.nations[nation].alive = false;
+  removeAttacks(game, (a) => a.attacker === nation);
+  for (const [id, u] of game.units) if (u.owner === nation) game.units.delete(id);
 }
 
 /** Removes `attack` and returns its troops to the attacker. */
@@ -298,17 +320,26 @@ function pushTargetNeighbours(game: Game, attack: Attack, tile: TileIndex): void
 }
 
 /**
- * Queues `tile` with priority = attacker-owned 4-neighbours + a random tie-break in [0, `frontierJitter`), drawn from
- * `game.rng`. A tile already queued is queued again only once its neighbour count exceeds its queued priority, which
- * leaves the old entry stale; otherwise nothing changes and no random number is drawn.
+ * Queues `tile` with priority = attacker-owned 4-neighbours + the aim bonus + a random tie-break in
+ * [0, `frontierJitter`), drawn from `game.rng`. The aim bonus is `aimWeight` × (1 − distance to the aim / `aimRange`),
+ * never below 0, and 0 for an attack without an aim. A tile already queued is queued again only once its neighbour
+ * count plus aim bonus exceeds its queued priority, which leaves the old entry stale; otherwise nothing changes and no
+ * random number is drawn.
  */
 function pushFrontier(game: Game, attack: Attack, tile: TileIndex): void {
-  const owned = countOwnedNeighbours(game, tile, attack.attacker);
+  const score = countOwnedNeighbours(game, tile, attack.attacker) + aimBonus(game, attack, tile);
   const queuedPriority = attack.queued.get(tile);
-  if (queuedPriority !== undefined && owned <= queuedPriority) return;
-  const priority = owned + game.rng.next() * CONFIG.combat.frontierJitter;
+  if (queuedPriority !== undefined && score <= queuedPriority) return;
+  const priority = score + game.rng.next() * CONFIG.combat.frontierJitter;
   attack.queued.set(tile, priority);
   attack.frontier.push(tile, priority);
+}
+
+/** How much nearness to `attack`'s aim adds to the priority of `tile`; 0 without an aim. */
+function aimBonus(game: Game, attack: Attack, tile: TileIndex): number {
+  if (attack.aim === null) return 0;
+  const { aimWeight, aimRange } = CONFIG.combat;
+  return aimWeight * Math.max(0, 1 - distance(game.map, tile, attack.aim) / aimRange);
 }
 
 function countOwnedNeighbours(game: Game, t: TileIndex, owner: NationId): number {

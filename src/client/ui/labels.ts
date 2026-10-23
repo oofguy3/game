@@ -12,6 +12,7 @@ export const BUILDING_LABELS: Record<BuildingType, string> = {
   airport: 'Airport',
   antiAir: 'Anti-air gun',
   radar: 'Radar station',
+  capital: 'Capital',
 };
 
 export const BUILDING_HINTS: Record<BuildingType, string> = {
@@ -26,6 +27,7 @@ export const BUILDING_HINTS: Record<BuildingType, string> = {
   airport: 'Planes and trade planes',
   antiAir: 'Shoots down enemy planes',
   radar: 'Warns of planes, boosts anti-air',
+  capital: 'Lose it and you are out',
 };
 
 export const UNIT_LABELS: Record<UnitType, string> = {

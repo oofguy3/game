@@ -5,9 +5,12 @@ export type Terrain = (typeof Terrain)[keyof typeof Terrain];
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'insane';
 export type Personality = 'aggressive' | 'builder' | 'trader' | 'opportunist' | 'diplomat';
 export type BuildingType = 'city' | 'factory' | 'barracks' | 'bank' | 'defensePost' | 'fortress'
-  | 'port' | 'navalBase' | 'airport' | 'antiAir' | 'radar';
+  | 'port' | 'navalBase' | 'airport' | 'antiAir' | 'radar' | 'capital';
+/** The building types a nation can build: every type but the capital. */
 export const BUILDING_TYPES: readonly BuildingType[] = ['city', 'factory', 'barracks', 'bank', 'defensePost',
   'fortress', 'port', 'navalBase', 'airport', 'antiAir', 'radar'];
+/** Every building type, the capital included: what building counts go over. */
+export const ALL_BUILDING_TYPES: readonly BuildingType[] = [...BUILDING_TYPES, 'capital'];
 export type UnitType = 'troopBoat' | 'tradeShip' | 'warship' | 'tradePlane' | 'bomber' | 'paraPlane' | 'fighter';
 export type Relation = 'neutral' | 'allied' | 'war';
 export type Phase = 'spawn' | 'playing' | 'ended';
@@ -54,7 +57,8 @@ export type GameEvent =
   | { type: 'spawned'; nation: NationId; tile: TileIndex }
   | { type: 'phase'; phase: Phase }
   | { type: 'attackStarted'; attacker: NationId; target: NationId; troops: number; support?: AttackSupport }
-  | { type: 'eliminated'; nation: NationId; by: NationId } // by 0: found nowhere to start
+  // by 0: found nowhere to start; capital: knocked out by the fall of its capital (`capitalFell` says so)
+  | { type: 'eliminated'; nation: NationId; by: NationId; capital?: true }
   | { type: 'buildingDone'; nation: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildingCaptured'; from: NationId; to: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildingDestroyed'; owner: NationId; by: NationId; building: BuildingType; tile: TileIndex }
@@ -71,4 +75,8 @@ export type GameEvent =
   | { type: 'aidSent'; from: NationId; to: NationId; gold: number; troops: number }
   | { type: 'relation'; a: NationId; b: NationId; relation: Relation }
   | { type: 'betrayal'; betrayer: NationId; victim: NationId }
+  // an enemy took land within reach of `nation`'s capital, which stands on `tile`
+  | { type: 'capitalThreat'; nation: NationId; tile: TileIndex }
+  // `nation`'s capital fell to `by`, who took over the `tiles` other tiles it still had
+  | { type: 'capitalFell'; nation: NationId; by: NationId; tiles: number }
   | { type: 'gameOver'; result: GameResult };

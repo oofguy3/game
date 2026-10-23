@@ -36,6 +36,8 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
       case 'landed':
         return 'your troops landed';
       case 'eliminated':
+        // a capital's fall already said it
+        if (e.capital) return null;
         if (e.by === 0) return e.nation === me ? 'you found nowhere to start and are out' : `${n(e.nation)} found nowhere to start and is out`;
         if (e.nation === me) return `${n(e.by)} wiped you out`;
         return `${n(e.by)} wiped out ${n(e.nation)}`;
@@ -94,6 +96,11 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
       case 'betrayal':
         if (e.victim === me) return `${n(e.betrayer)} betrayed you!`;
         return `${n(e.betrayer)} betrayed ${n(e.victim)}`;
+      case 'capitalThreat':
+        return e.nation === me ? 'your capital is under attack!' : null;
+      case 'capitalFell':
+        if (e.nation === me) return `your capital fell to ${n(e.by)} — you are out`;
+        return `${n(e.nation)}’s capital fell to ${n(e.by)} — ${n(e.nation)} is out`;
       case 'phase':
         return e.phase === 'playing' ? 'The war begins!' : null;
       case 'gameOver':

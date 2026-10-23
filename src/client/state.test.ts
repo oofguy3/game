@@ -109,9 +109,14 @@ describe('ClientState', () => {
     const aidElsewhere: GameEvent = { type: 'aidSent', from: 2, to: 3, gold: 100, troops: 0 };
     const forMe: GameEvent = { ...others, support: { ally: 1, kind: 'join' } };
     const forOthers: GameEvent = { ...others, support: { ally: 4, kind: 'defend' } };
-    const events = [mine, others, everyone, aidToMe, aidFromMe, aidElsewhere, forMe, forOthers];
+    const myCapital: GameEvent = { type: 'capitalThreat', nation: 1, tile: 3 };
+    const theirCapital: GameEvent = { type: 'capitalThreat', nation: 2, tile: 5 };
+    const fell: GameEvent = { type: 'capitalFell', nation: 3, by: 2, tiles: 40 };
+    const events = [
+      mine, others, everyone, aidToMe, aidFromMe, aidElsewhere, forMe, forOthers, myCapital, theirCapital, fell,
+    ];
     s.applyUpdate(update({ events }));
-    expect(s.feed).toEqual([mine, everyone, aidToMe, aidFromMe, forMe]);
+    expect(s.feed).toEqual([mine, everyone, aidToMe, aidFromMe, forMe, myCapital, fell]);
     s.applyUpdate(update({ events: Array.from({ length: 60 }, () => mine) }));
     expect(s.feed).toHaveLength(50);
   });

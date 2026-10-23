@@ -17,7 +17,10 @@ export const CONFIG = {
             defenderLossFactor: 1, frontFraction: 0.25, minTilesPerTick: 1, maxTilesPerTick: 80,
             // smallest share of troops an attack command sends; random tie-break added to frontier priorities;
             // frontier tiles estimateConquest averages over
-            minAttackRatio: 0.01, frontierJitter: 0.5, estimateSamples: 64 },
+            minAttackRatio: 0.01, frontierJitter: 0.5, estimateSamples: 64,
+            // an aimed attack (capitals only) adds up to aimWeight to the priority of a frontier tile, falling to 0 at
+            // aimRange tiles from the aim
+            aimWeight: 3, aimRange: 50 },
   buildings: {
     minSpacing: 3, costGrowth: 1,
     city: { cost: 1000, buildTicks: 50, maxTroops: 25000 },
@@ -31,7 +34,12 @@ export const CONFIG = {
     airport: { cost: 5000, buildTicks: 100, range: 150, tradeEveryTicks: 200 },
     antiAir: { cost: 2500, buildTicks: 50, radius: 20, hitChance: 0.15 },
     radar: { cost: 3000, buildTicks: 60, radius: 60, boost: 1.5 },
+    // placed on the spawn, never built; defends like a fortress
+    capital: { cost: 0, buildTicks: 0, radius: 25, multiplier: 2.5 },
   },
+  // no landings or paratroopers within Chebyshev distance landingClearance of another nation's capital; a nation is
+  // warned its capital is under attack at most once every threatCooldownTicks
+  capitals: { landingClearance: 3, threatCooldownTicks: 300 },
   units: {
     troopBoat: { speed: 1.0, baseCap: 3 },
     // partners whose port lies preferredMin–preferredMax tiles away are picked at full weight, others at offRangeWeight

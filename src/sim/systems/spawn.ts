@@ -6,6 +6,7 @@ import type { Nation } from '../core/nation';
 import type { GameMap } from '../map/gameMap';
 import { distance, inBounds, isLand, tileOf, xOf, yOf } from '../map/grid';
 import type { Rng } from '../util/rng';
+import { liftCapital, placeCapital } from './capitals';
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 
@@ -13,7 +14,7 @@ const fail = (reason: string): CommandResult => ({ ok: false, reason });
  * Puts (or moves) `nation`'s start at `tile`. Valid only in the spawn phase, on land that is unowned (or already the
  * nation's own, since its old disk is released first), at least `game.spawnSpacing` from every other nation's spawn.
  * On success the nation's old disk is released, a new one is claimed, and troops and gold are set to the start values
- * (the start gold the rules give).
+ * (the start gold the rules give); with capitals, the capital moves to the new start.
  * Reports the reason on failure without emitting `rejected`; `applyCommand` does that.
  */
 export function spawnNation(game: Game, nation: Nation, tile: TileIndex): CommandResult {
@@ -49,7 +50,8 @@ export function randomSpawnTile(game: Game, rng: Rng, spacing: number = game.spa
 }
 
 /**
- * Ends the spawn phase: every living nation that has not spawned gets a random start, in id order, from `game.rng`.
+ * Ends the spawn phase: every living nation that has not spawned gets a random start (and, with capitals, its capital
+ * there), in id order, from `game.rng`.
  * A nation with no land left to start on is eliminated (by no one: `by` 0). Then the game moves on to the playing phase.
  */
 export function endSpawnPhase(game: Game): void {
@@ -65,9 +67,15 @@ export function endSpawnPhase(game: Game): void {
   game.emit({ type: 'phase', phase: 'playing' });
 }
 
-/** Releases the nation's previous disk, claims the free land of the new one and gives the start resources. */
+/**
+ * Releases the nation's previous disk, claims the free land of the new one and gives the start resources. With
+ * capitals the capital stands on the start tile: the old one is lifted before the old disk goes, so giving the land up
+ * doesn't destroy it.
+ */
 function placeSpawn(game: Game, nation: Nation, tile: TileIndex): void {
+  const { capitals } = game.tuning;
   if (nation.spawnTile >= 0) {
+    if (capitals) liftCapital(game, nation.id);
     forEachDiskTile(game.map, nation.spawnTile, (t) => {
       if (game.owner[t] === nation.id) game.setOwner(t, 0);
     });
@@ -75,6 +83,7 @@ function placeSpawn(game: Game, nation: Nation, tile: TileIndex): void {
   forEachDiskTile(game.map, tile, (t) => {
     if (isLand(game.map, t) && game.owner[t] === 0) game.setOwner(t, nation.id);
   });
+  if (capitals) placeCapital(game, nation.id, tile);
   nation.spawned = true;
   nation.spawnTile = tile;
   nation.troops = CONFIG.spawn.startTroops;

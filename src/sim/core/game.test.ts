@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { nationColor } from '../../shared/colors';
 import { CONFIG } from '../../shared/config';
-import { BUILDING_TYPES } from '../../shared/types';
+import { ALL_BUILDING_TYPES } from '../../shared/types';
 import type { Command, GameEvent, NationId, Phase, TileIndex } from '../../shared/types';
 import { tileOf } from '../map/grid';
 import { mapFromAscii } from '../testing/asciiMap';
@@ -74,7 +74,7 @@ describe('Game construction', () => {
       personality: 'builder', stats: { peakTiles: 0, tilesCaptured: 0, buildingsBuilt: 0, goldEarned: 0 },
     });
     expect(n.border.size).toBe(0);
-    expect(Object.keys(n.buildingCounts).sort()).toEqual([...BUILDING_TYPES].sort());
+    expect(Object.keys(n.buildingCounts).sort()).toEqual([...ALL_BUILDING_TYPES].sort());
     expect(Object.values(n.buildingCounts).every((c) => c === 0)).toBe(true);
   });
 

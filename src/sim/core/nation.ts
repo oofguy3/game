@@ -1,4 +1,4 @@
-import { BUILDING_TYPES } from '../../shared/types';
+import { ALL_BUILDING_TYPES } from '../../shared/types';
 import type { BuildingType, Difficulty, NationId, Personality, TileIndex } from '../../shared/types';
 
 export interface Nation {
@@ -32,7 +32,7 @@ export interface Nation {
 
 export function emptyBuildingCounts(): Record<BuildingType, number> {
   const counts = {} as Record<BuildingType, number>;
-  for (const type of BUILDING_TYPES) counts[type] = 0;
+  for (const type of ALL_BUILDING_TYPES) counts[type] = 0;
   return counts;
 }
 

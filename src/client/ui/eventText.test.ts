@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameEvent } from '../../shared/types';
+import { isAlarm } from './eventFeed';
 import { describeEvent } from './eventText';
 
 const names = new Map([[1, 'You'], [2, 'Varlonia'], [3, 'Kestria']]);
@@ -64,5 +65,23 @@ describe('describeEvent', () => {
     expect(line(started(4, 5, 8, 'join'))).toBeNull();
     expect(line(started(6, 7, 8, 'defend'))).toBeNull();
     expect(line(started(5, 1, 7, 'join'))).toBe('Varlonia attacked you');
+  });
+
+  it('capital lines', () => {
+    const world = new Map([[1, 'You'], [4, 'Nuni'], [5, 'Danmek']]);
+    const line = (e: GameEvent): string | null => describeEvent(e, world, 1);
+    const threat: GameEvent = { type: 'capitalThreat', nation: 1, tile: 12 };
+    expect(line(threat)).toBe('Your capital is under attack!');
+    expect(isAlarm(threat, 1)).toBe(true);
+    expect(line({ type: 'capitalThreat', nation: 5, tile: 12 })).toBeNull();
+    const fell = (nation: number, by: number): GameEvent => ({ type: 'capitalFell', nation, by, tiles: 300 });
+    expect(line(fell(5, 4))).toBe('Danmek’s capital fell to Nuni — Danmek is out');
+    expect(isAlarm(fell(5, 4), 1)).toBe(false);
+    expect(line(fell(1, 4))).toBe('Your capital fell to Nuni — you are out');
+    expect(isAlarm(fell(1, 4), 1)).toBe(true);
+    expect(line(fell(5, 1))).toBe('Danmek’s capital fell to you — Danmek is out');
+    // the fall already said it
+    expect(line({ type: 'eliminated', nation: 5, by: 4, capital: true })).toBeNull();
+    expect(line({ type: 'eliminated', nation: 1, by: 4, capital: true })).toBeNull();
   });
 });

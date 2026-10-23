@@ -120,6 +120,10 @@ export class ClientState {
         return e.from === me || e.to === me;
       case 'relation':
         return e.a === me || e.b === me;
+      case 'capitalThreat':
+        return e.nation === me;
+      case 'capitalFell':
+        return true;
     }
   }
 }
