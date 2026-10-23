@@ -3,7 +3,7 @@ import type { Camera } from '../camera';
 import type { ClientState } from '../state';
 import type { KeyValue } from '../storage';
 import { h } from './dom';
-import { flashesFor, minimapSize, minimapToTile, viewBox } from './minimapGeometry';
+import { flashesFor, mergeFlashes, minimapSize, minimapToTile, viewBox } from './minimapGeometry';
 import type { Flash, MiniSize } from './minimapGeometry';
 
 export const MINIMAP_KEY = 'borderline.minimap';
@@ -69,11 +69,10 @@ export class Minimap {
     this.storage.setItem(MINIMAP_KEY, hidden ? 'hidden' : 'shown');
   }
 
-  /** Takes the update's lost land and bombs as flashes. */
+  /** Takes the update's lost land and bombs as flashes (one ring at a time per cell and kind). */
   onUpdate(events: GameEvent[], now: number): void {
     const { init, lost } = this.state;
-    this.flashes.push(...flashesFor(events, lost, init.playerId, init.width, now));
-    if (this.flashes.length > MAX_FLASHES) this.flashes.splice(0, this.flashes.length - MAX_FLASHES);
+    this.flashes = mergeFlashes(this.flashes, flashesFor(events, lost, init.playerId, init.width, now), now, FLASH_MS, MAX_FLASHES);
   }
 
   /** Draws the map picture, the view box for a `viewW`×`viewH` screen, and the flashes still fading. */

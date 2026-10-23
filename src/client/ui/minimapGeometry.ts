@@ -38,11 +38,14 @@ export function minimapToTile(mx: number, my: number, size: MiniSize): { x: numb
   return { x: mx / size.scale, y: my / size.scale };
 }
 
+/** Lost land is grouped, and flashes are kept, per FLASH_CELL×FLASH_CELL-tile cell. */
+export const FLASH_CELL = 24;
+
 /**
  * Where lost `tiles` lie, grouped into `cell`×`cell`-tile cells: the middle of each cell's lost tiles (in tiles), the
  * cells with the most first, at most `max`.
  */
-export function lossCells(tiles: readonly TileIndex[], width: number, cell = 24, max = 12): { x: number; y: number }[] {
+export function lossCells(tiles: readonly TileIndex[], width: number, cell = FLASH_CELL, max = 12): { x: number; y: number }[] {
   const groups = new Map<number, { n: number; sx: number; sy: number; first: number }>();
   tiles.forEach((t, i) => {
     const x = t % width;
@@ -69,4 +72,22 @@ export function flashesFor(events: readonly GameEvent[], lost: readonly TileInde
     out.push({ x: x + 0.5, y: (e.tile - x) / width + 0.5, kind: e.owner === me ? 'danger' : 'bomb', start: now });
   }
   return out;
+}
+
+/**
+ * `current` with `incoming` added: flashes `lifeMs` old are dropped, an incoming flash is skipped while its cell already
+ * has a live ring of its kind (so a long attack pulses once per ring instead of pushing the others out), and the newest
+ * `max` stay.
+ */
+export function mergeFlashes(current: readonly Flash[], incoming: readonly Flash[], now: number, lifeMs: number, max: number): Flash[] {
+  const cell = (f: Flash): string => `${f.kind}:${Math.floor(f.x / FLASH_CELL)},${Math.floor(f.y / FLASH_CELL)}`;
+  const out = current.filter((f) => now - f.start < lifeMs);
+  const live = new Set(out.map(cell));
+  for (const f of incoming) {
+    const key = cell(f);
+    if (live.has(key)) continue;
+    live.add(key);
+    out.push(f);
+  }
+  return out.length > max ? out.slice(out.length - max) : out;
 }

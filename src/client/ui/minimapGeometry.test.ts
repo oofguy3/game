@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameEvent } from '../../shared/types';
-import { flashesFor, lossCells, minimapSize, minimapToTile, viewBox } from './minimapGeometry';
+import { flashesFor, lossCells, mergeFlashes, minimapSize, minimapToTile, viewBox } from './minimapGeometry';
+import type { Flash } from './minimapGeometry';
 
 describe('minimap geometry', () => {
   it("fits the map's shape inside 240×160", () => {
@@ -47,5 +48,26 @@ describe('minimap geometry', () => {
       { x: 6.5, y: 5.5, kind: 'danger', start: 1000 },
       { x: 8.5, y: 7.5, kind: 'bomb', start: 1000 },
     ]);
+  });
+
+  it('mergeFlashes keeps one live ring per cell and kind, so a long attack cannot push other rings out', () => {
+    const bomb: Flash = { x: 200.5, y: 100.5, kind: 'bomb', start: 0 };
+    let flashes = mergeFlashes([], [bomb], 0, 1500, 12);
+    // a second of losses in three cells, ten updates a second, each a little apart inside its cell
+    for (let t = 100; t <= 1000; t += 100) {
+      const losses = [30, 80, 130].map((x): Flash => ({ x: x + (t % 7), y: 10.5, kind: 'danger', start: t }));
+      flashes = mergeFlashes(flashes, losses, t, 1500, 12);
+    }
+    expect(flashes).toContainEqual(bomb);
+    expect(flashes.filter((f) => f.kind === 'danger').map((f) => f.start)).toEqual([100, 100, 100]);
+    // once a ring has faded, the next loss there starts a new one
+    flashes = mergeFlashes(flashes, [{ x: 31.5, y: 10.5, kind: 'danger', start: 1700 }], 1700, 1500, 12);
+    expect(flashes).toEqual([{ x: 31.5, y: 10.5, kind: 'danger', start: 1700 }]);
+  });
+
+  it('mergeFlashes keeps at most `max`, the newest', () => {
+    const far = (i: number): Flash => ({ x: i * 100 + 0.5, y: 0.5, kind: 'danger', start: i });
+    const flashes = mergeFlashes([far(0), far(1)], [far(2), far(3)], 3, 1500, 3);
+    expect(flashes.map((f) => f.start)).toEqual([1, 2, 3]);
   });
 });
