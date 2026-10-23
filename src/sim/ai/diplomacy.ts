@@ -13,7 +13,8 @@ import type { NeighborInfo, Perception } from './perception';
  * - an alliance, unless it comes from the runaway leader, would leave us nothing to take by land, comes from a nation
  *   trusted less than `allyTrust` or from our best target; and only from a partner with `allyStrength` of our troops,
  *   or if we are diplomatic (`allyDiplomacy`);
- * - peace, when they would take more of us than we of them, or when we have another war;
+ * - peace, when they would take more of us than we of them, when neither can reach the other over land, or when we
+ *   have another war;
  * - a deal, when what we get is worth more than what we give (gold at 1, troops at `troopGoldValue`, ×`warTroopValue`
  *   at war) and we can pay;
  * - a joint attack on a neighbour we aren't allied with that scores `jointAttackShare` of our best target; accepting
@@ -33,7 +34,8 @@ export function evaluateRequest(game: Game, p: Perception, bot: Bot, req: Diplom
       if (p.wars.some((w) => w !== req.from)) return true;
       const ours = estimateConquest(game, p.me, req.from, p.troops).tiles;
       const theirs = estimateConquest(game, req.from, p.me, game.nations[req.from].troops).tiles;
-      return ours < theirs;
+      // a war neither side can fight over land isn't worth keeping
+      return ours < theirs || (ours === 0 && theirs === 0);
     }
     case 'deal':
       return req.deal !== undefined && p.gold >= req.deal.getGold && p.troops >= req.deal.getTroops
