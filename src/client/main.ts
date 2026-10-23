@@ -170,6 +170,9 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
   const update = (): void => {
     units.update(state.units, performance.now());
     hud.update();
+    // a building that can no longer be afforded (or placed) ends placing mode
+    const mode = controls?.mode;
+    if (mode?.kind === 'build' && !canBuild(mode.building)) controls!.setMode({ kind: 'default' });
     diplomacy.update();
     requests.update();
     leaderboard.update();
