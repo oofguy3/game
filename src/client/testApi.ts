@@ -1,5 +1,8 @@
 import { CONFIG } from '../shared/config';
 import type { Command, GameResult, NationId, TileIndex } from '../shared/types';
+import type { SoundName } from './audio/catalog';
+import type { Mixer } from './audio/mixer';
+import type { WebAudioOutput } from './audio/webAudio';
 import type { Camera } from './camera';
 import type { MapInfo } from './mapInfo';
 import type { Renderer } from './render/renderer';
@@ -36,6 +39,22 @@ export interface TestApi {
   forceResult(result: GameResult): void;
   /** How grey the map is, 0 to 1. */
   grey(): number;
+  /** The sound system: the audio context's state, the settings, and the latest sounds played. */
+  sound(): { state: string; muted: boolean; volume: number; played: SoundName[] };
+}
+
+/** What the test API reaches into. */
+export interface TestHooks {
+  state: ClientState;
+  info: MapInfo;
+  camera: Camera;
+  canvas: HTMLCanvasElement;
+  send: (cmd: Command) => void;
+  renderer: Renderer;
+  /** Refreshes the page's panels from the state. */
+  refresh: () => void;
+  mixer: Mixer;
+  output: WebAudioOutput;
 }
 
 declare global {
@@ -52,10 +71,7 @@ const MAX_DEPTH = 12;
 const DISTANCE_SAMPLES = 600;
 
 /** Exposes hooks for the browser tests on `window.__test` (only with ?test=1). */
-export function installTestApi(
-  state: ClientState, info: MapInfo, camera: Camera, canvas: HTMLCanvasElement, send: (cmd: Command) => void,
-  renderer: Renderer, refresh: () => void,
-): void {
+export function installTestApi({ state, info, camera, canvas, send, renderer, refresh, mixer, output }: TestHooks): void {
   const toPage = (tile: number): { x: number; y: number } => {
     const w = state.init.width;
     const p = camera.tileToScreen((tile % w) + 0.5, Math.floor(tile / w) + 0.5);
@@ -95,6 +111,7 @@ export function installTestApi(
       refresh();
     },
     grey: () => renderer.grey,
+    sound: () => ({ state: output.state, ...mixer.settings, played: [...mixer.played] }),
   };
 }
 

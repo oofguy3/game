@@ -1,6 +1,9 @@
 import { GAME_NAME } from '../shared/constants';
 import type { BuildingType, Command, Difficulty, MapChoice, MapSize } from '../shared/types';
 import type { GameUpdate, InitPayload, StartOptions } from '../worker/protocol';
+import { SoundDirector } from './audio/director';
+import { Mixer } from './audio/mixer';
+import { WebAudioOutput } from './audio/webAudio';
 import { SimBridge } from './bridge';
 import { Camera } from './camera';
 import { Controls } from './input';
@@ -11,6 +14,7 @@ import { buildTerrainLook } from './render/look/terrainLook';
 import { Renderer } from './render/renderer';
 import { UnitInterpolator } from './render/units';
 import { ClientState } from './state';
+import { safeStorage } from './storage';
 import { installTestApi } from './testApi';
 import { ContextMenu, menuEntries } from './ui/contextMenu';
 import { DiplomacyPanel } from './ui/diplomacyPanel';
@@ -22,6 +26,7 @@ import { Leaderboard } from './ui/leaderboard';
 import { PauseButton } from './ui/pauseButton';
 import { createMenu } from './ui/menu';
 import { RequestPopups } from './ui/requests';
+import { SoundControls } from './ui/soundControls';
 import { startBackdrop } from './ui/titleBackdrop';
 import './styles.css';
 
@@ -33,6 +38,15 @@ const params = new URLSearchParams(location.search);
 const testMode = params.get('test') === '1';
 const app = h('div', { class: 'app' });
 document.body.append(app);
+
+// Sound: browsers only allow it after a click or key press, so the first one starts it (and loads the files).
+const soundOutput = new WebAudioOutput(import.meta.env.BASE_URL);
+const mixer = new Mixer(soundOutput, () => performance.now(), safeStorage());
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => soundOutput.unlock(), { capture: true });
+document.addEventListener('click', (e) => {
+  if (e.target instanceof Element && e.target.closest('button')) mixer.play('click');
+}, { capture: true });
+document.addEventListener('visibilitychange', () => (document.hidden ? soundOutput.suspend() : soundOutput.resume()));
 
 /** Stops the drifting map behind the title screen, while it is showing. */
 let stopBackdrop: (() => void) | null = null;
@@ -71,7 +85,7 @@ function start(options: StartOptions): void {
   const loading = h('div', { class: 'banner', text: 'Building the world…' });
   app.append(glCanvas, canvas, loading);
   const state = new ClientState();
-  let ui: { update(): void } | null = null;
+  let ui: { update(u?: GameUpdate): void } | null = null;
 
   const bridge = new SimBridge({
     onInit(init: InitPayload) {
@@ -82,7 +96,7 @@ function start(options: StartOptions): void {
     onUpdate(update: GameUpdate) {
       if (!state.init) return;
       state.applyUpdate(update);
-      ui?.update();
+      ui?.update(update);
     },
     onError(message: string) {
       app.append(h('div', { class: 'banner error', text: `Something went wrong: ${message}` }));
@@ -98,7 +112,7 @@ function start(options: StartOptions): void {
  * Sets up the camera, renderer, panels and controls once the match exists; returns what to refresh on updates. The map
  * is drawn by the graphics chip on `glCanvas` unless that isn't available or the URL asks for ?look=flat.
  */
-function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state: ClientState, bridge: SimBridge): { update(): void } {
+function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state: ClientState, bridge: SimBridge): { update(u?: GameUpdate): void } {
   const { init } = state;
   const size = (): void => {
     for (const c of [canvas, glCanvas]) {
@@ -127,7 +141,12 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   let land = 0;
   for (const t of init.terrain) if (t !== 0) land++;
 
-  const pause = new PauseButton((paused) => bridge.setPaused(paused));
+  const pause = new PauseButton((paused) => {
+    bridge.setPaused(paused);
+    mixer.setGamePaused(paused);
+  });
+  const soundControls = new SoundControls(mixer);
+  const director = new SoundDirector(init.playerId);
   let controls: Controls | null = null;
   const hud = new Hud(state, (type) => selectBuild(type), colors.get(init.playerId) ?? 0x3b82f6);
   const leaderboard = new Leaderboard(state);
@@ -137,7 +156,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   const diplomacy = new DiplomacyPanel(state, names, colors, send);
   const requests = new RequestPopups(state, names, send);
   const menu = new ContextMenu();
-  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
+  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, soundControls.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
   // fit the whole map in the space above the bottom bar, and keep the news feed just above it
   const hudHeight = (): number => hud.el.getBoundingClientRect().height;
   camera.fitMap(hudHeight() + HUD_GAP);
@@ -172,7 +191,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
       return open;
     },
   });
-  if (testMode) installTestApi(state, info, camera, canvas, send, renderer, () => update());
+  if (testMode) installTestApi({ state, info, camera, canvas, send, renderer, refresh: () => update(), mixer, output: soundOutput });
 
   let last = performance.now();
   const loop = (now: number): void => {
@@ -194,7 +213,13 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
       banner.classList.remove('hidden');
     } else banner.classList.add('hidden');
   };
-  const update = (): void => {
+  /** Refreshes everything; with the update that just arrived, also plays its sounds. */
+  const update = (u?: GameUpdate): void => {
+    if (u) {
+      for (const sound of director.sounds({ events: u.events, gained: state.gained, units: state.units, buildings: u.buildings })) {
+        mixer.play(sound);
+      }
+    }
     units.update(state.units, performance.now());
     hud.update();
     // a building that can no longer be afforded (or placed) ends placing mode
