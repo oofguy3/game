@@ -59,10 +59,10 @@ button.primary:hover { background: #2563eb; }
 .leaderboard-row.me .land, .leaderboard-row.me .troops { color: var(--text); }
 .leaderboard-row.dead { opacity: 0.5; text-decoration: line-through; }
 
-/* Speed */
-.speed { top: 12px; left: 12px; display: flex; gap: 4px; padding: 6px; }
-.speed button { min-width: 38px; }
-.speed button.active { background: var(--accent); border-color: var(--accent); }
+/* Pause */
+.pause { top: 12px; left: 12px; display: flex; padding: 6px; }
+.pause button { min-width: 38px; }
+.pause button.active { background: var(--accent); border-color: var(--accent); }
 
 /* Event feed */
 .feed { position: absolute; left: 12px; bottom: 132px; width: 340px; pointer-events: none; display: flex; flex-direction: column; gap: 4px; }

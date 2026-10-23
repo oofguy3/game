@@ -1,6 +1,5 @@
 import type { Command } from '../shared/types';
 import type { FromWorker, GameUpdate, InitPayload, StartOptions, ToWorker } from '../worker/protocol';
-import type { Speed } from '../worker/scheduler';
 
 export interface BridgeHandlers {
   onInit(init: InitPayload): void;
@@ -40,8 +39,8 @@ export class SimBridge {
     this.post({ type: 'command', command });
   }
 
-  setSpeed(speed: Speed): void {
-    this.post({ type: 'speed', speed });
+  setPaused(paused: boolean): void {
+    this.post({ type: 'pause', paused });
   }
 
   /** Ends the match and its worker. */

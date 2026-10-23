@@ -3,7 +3,6 @@ import type {
   TileIndex, UnitType,
 } from '../shared/types';
 import type { Nation } from '../sim/core/nation';
-import type { Speed } from './scheduler';
 
 /** How the player set up the match on the menu. */
 export interface StartOptions {
@@ -18,7 +17,7 @@ export interface StartOptions {
 export type ToWorker =
   | { type: 'start'; options: StartOptions; worldMap?: ArrayBuffer }
   | { type: 'command'; command: Command }
-  | { type: 'speed'; speed: Speed };
+  | { type: 'pause'; paused: boolean };
 
 export type FromWorker =
   | { type: 'init'; init: InitPayload }

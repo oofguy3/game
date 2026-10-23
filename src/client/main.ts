@@ -17,9 +17,9 @@ import { EndScreen } from './ui/endScreen';
 import { EventFeed } from './ui/eventFeed';
 import { Hud } from './ui/hud';
 import { Leaderboard } from './ui/leaderboard';
+import { PauseButton } from './ui/pauseButton';
 import { createMenu } from './ui/menu';
 import { RequestPopups } from './ui/requests';
-import { SpeedControls } from './ui/speedControls';
 import './styles.css';
 
 /** Space kept between the fitted map and the bottom bar, in pixels. */
@@ -107,7 +107,7 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
   let land = 0;
   for (const t of init.terrain) if (t !== 0) land++;
 
-  const speed = new SpeedControls((s) => bridge.setSpeed(s));
+  const pause = new PauseButton((paused) => bridge.setPaused(paused));
   let controls: Controls | null = null;
   const hud = new Hud(state, (type) => selectBuild(type));
   const leaderboard = new Leaderboard(state);
@@ -117,7 +117,7 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
   const diplomacy = new DiplomacyPanel(state, names, colors, send);
   const requests = new RequestPopups(state, names, send);
   const menu = new ContextMenu();
-  document.querySelector('.app')!.append(hud.el, leaderboard.el, speed.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
+  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
   // fit the whole map in the space above the bottom bar
   camera.fitMap(hud.el.getBoundingClientRect().height + HUD_GAP);
 
@@ -135,7 +135,7 @@ function buildGame(canvas: HTMLCanvasElement, state: ClientState, bridge: SimBri
     send,
     attackRatio: () => hud.attackRatio,
     nudgeRatio: (step) => hud.nudgeRatio(step),
-    togglePause: () => speed.togglePause(),
+    togglePause: () => pause.toggle(),
     canBuild,
     onModeChange: (mode) => hud.setSelected(mode.kind === 'build' ? mode.building : null),
     openMenu: (tile, x, y) => menu.open(menuEntries(menuContext, tile), x, y),

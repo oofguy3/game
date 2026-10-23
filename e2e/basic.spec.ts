@@ -32,3 +32,20 @@ test('menu starts a game', async ({ page }) => {
   await expect(page.locator('.hud')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('one game speed: a single pause button, and Space toggles it', async ({ page }) => {
+  await page.goto('/game/?autostart=1&test=1&map=random&size=small&seed=7&bots=4&difficulty=easy');
+  await page.waitForFunction(() => window.__test?.state.phase === 'spawn');
+  const bar = page.locator('.pause');
+  await expect(bar.getByRole('button')).toHaveCount(1);
+  const button = bar.getByRole('button');
+  await expect(button).toHaveAccessibleName('Pause (Space)');
+  await button.click();
+  await expect(button).toHaveAccessibleName('Resume (Space)');
+  const paused = await page.evaluate(() => window.__test.state.tick);
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.__test.state.tick)).toBe(paused);
+  await page.keyboard.press('Space');
+  await expect(button).toHaveAccessibleName('Pause (Space)');
+  await expect.poll(() => page.evaluate(() => window.__test.state.tick), { timeout: 5_000 }).toBeGreaterThan(paused);
+});

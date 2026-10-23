@@ -26,7 +26,7 @@ ctx.onmessage = (e) => {
   try {
     if (msg.type === 'start') start(msg.options, msg.worldMap);
     else if (msg.type === 'command') match?.queuePlayer(msg.command);
-    else if (msg.type === 'speed') scheduler.setSpeed(msg.speed);
+    else if (msg.type === 'pause') scheduler.setPaused(msg.paused);
   } catch (err) {
     fail(err);
   }
