@@ -60,7 +60,7 @@ export class Game {
   readonly rng: Rng;
   readonly debug: boolean;
   readonly checkVictory: boolean;
-  /** How the match is played. */
+  /** How the match is played: the game's own copy of the rules it was set up with. */
   readonly rules: MatchRules;
   /** The numbers the rules give, read by the systems in place of the matching `CONFIG` values. */
   readonly tuning: Tuning;
@@ -103,7 +103,7 @@ export class Game {
     this.rng = new Rng(setup.seed);
     this.debug = setup.debug ?? false;
     this.checkVictory = setup.checkVictory ?? true;
-    this.rules = setup.rules ?? DEFAULT_RULES;
+    this.rules = { ...(setup.rules ?? DEFAULT_RULES) };
     this.tuning = tuningFor(this.rules);
     this.spawnEndsAt = setup.spawnTicks ?? CONFIG.spawn.phaseTicks;
     this.owner = new Uint16Array(setup.map.width * setup.map.height);

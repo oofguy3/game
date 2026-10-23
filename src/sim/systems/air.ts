@@ -50,9 +50,10 @@ function onMap(game: Game, tile: TileIndex): boolean {
 
 /**
  * Sends a bomber from `nation`'s nearest ready airport in range against the nation owning `tile`, for `bomber.cost`
- * gold. It declares war; the airport rests for `bomber.cooldownTicks`.
+ * gold. It declares war; the airport rests for `bomber.cooldownTicks`. Refused when the rules have no planes.
  */
 export function launchBomber(game: Game, nation: NationId, tile: TileIndex): CommandResult {
+  if (!game.tuning.planes) return fail('no planes');
   if (!onMap(game, tile)) return fail('off the map');
   const owner = game.owner[tile];
   if (owner === nation) return fail('own tile');
@@ -73,8 +74,10 @@ export function launchBomber(game: Game, nation: NationId, tile: TileIndex): Com
 /**
  * Drops paratroopers on `tile` (land that isn't ours or an ally's) from `nation`'s nearest ready airport in range:
  * floor(min(ratio, `maxTroopsShare`) × troops) jump, for `paraPlane.cost` gold. Landing starts an attack from there.
+ * Refused when the rules have no planes.
  */
 export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex, ratio: number): CommandResult {
+  if (!game.tuning.planes) return fail('no planes');
   if (!onMap(game, tile)) return fail('off the map');
   if (!isLand(game.map, tile)) return fail('not land');
   const owner = game.owner[tile];
@@ -97,9 +100,10 @@ export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex
 
 /**
  * Builds a fighter at `nation`'s finished airport `airportId` for `fighter.cost`; it guards that airport's sky once
- * ready, after `fighter.buildTicks` scaled by the rules' build time scale.
+ * ready, after `fighter.buildTicks` scaled by the rules' build time scale. Refused when the rules have no planes.
  */
 export function buildFighter(game: Game, nation: NationId, airportId: number): CommandResult {
+  if (!game.tuning.planes) return fail('no planes');
   const airport = game.buildings.byId.get(airportId);
   if (!airport || airport.owner !== nation || airport.type !== 'airport') return fail('not your airport');
   if (airport.ticksLeft > 0) return fail('still being built');

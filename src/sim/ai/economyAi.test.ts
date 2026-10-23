@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Command, NationId, TileIndex } from '../../shared/types';
+import { PLANE_BUILDINGS } from '../../shared/rules';
+import type { MatchRules } from '../../shared/rules';
+import type { BuildingType, Command, NationId, TileIndex } from '../../shared/types';
 import { applyCommand } from '../core/commands';
 import type { Game } from '../core/game';
-import { distance } from '../map/grid';
+import { distance, tileOf } from '../map/grid';
 import { buildingCost } from '../systems/buildings';
 import { declareWar } from '../systems/relations';
 import { makeTestGame } from '../testing/fixtures';
@@ -18,6 +20,12 @@ function distanceTo(g: Game, tile: TileIndex, owner: NationId): number {
   let best = Infinity;
   for (let t = 0; t < g.owner.length; t++) if (g.owner[t] === owner) best = Math.min(best, distance(g.map, tile, t));
   return best;
+}
+
+/** Puts a finished building of `type` for `owner` on `tile`. */
+function place(g: Game, owner: NationId, type: BuildingType, tile: TileIndex): void {
+  g.buildings.add({ id: g.nextId(), type, owner, tile, ticksLeft: 0, cooldown: 0 });
+  g.nations[owner].buildingCounts[type]++;
 }
 
 const strip = (width: number, height: number, owners: (x: number) => string): string[][] => {
@@ -91,6 +99,35 @@ describe('chooseBuild', () => {
     const g = makeTestGame({ map: ['####'], owners: ['aa..'], nations: [{ troops: 1000, gold: 0 }] });
     const bot = new Bot(g, 1, 'insane', 'builder', SEED);
     expect(chooseBuild(g, perceive(g, 1), bot)).toBeNull();
+  });
+
+  it('with no planes, bots never rank the plane buildings', () => {
+    // a at war with b, which has an airport: a values an airport of its own, an anti-air gun over its exposed city and
+    // a radar over its two bare guns
+    const ranked = (rules?: Partial<MatchRules>): BuildingType[] => {
+      const [map, owners] = strip(80, 21, (x) => (x < 40 ? 'a' : 'b'));
+      const g = makeTestGame({ map, owners, nations: [{ troops: 20_000, gold: 50_000 }, { troops: 3_000 }], rules });
+      declareWar(g, 1, 2);
+      place(g, 2, 'airport', tileOf(g.map, 70, 10));
+      place(g, 1, 'antiAir', tileOf(g.map, 4, 2));
+      place(g, 1, 'antiAir', tileOf(g.map, 4, 18));
+      place(g, 1, 'city', tileOf(g.map, 36, 10));
+      return rankBuilds(g, perceive(g, 1), new Bot(g, 1, 'insane', 'aggressive', SEED)).map((r) => r.type);
+    };
+    expect(ranked()).toEqual(expect.arrayContaining([...PLANE_BUILDINGS]));
+    const without = ranked({ noPlanes: true });
+    expect(without).toContain('factory');
+    for (const type of PLANE_BUILDINGS) expect(without).not.toContain(type);
+  });
+
+  it('with rich start, a factory is worth twice as much', () => {
+    const factory = (rules?: Partial<MatchRules>): number => {
+      const [map, owners] = strip(20, 10, () => 'a');
+      const g = makeTestGame({ map, owners, nations: [{ troops: 3000, gold: 100_000 }], rules });
+      const bot = new Bot(g, 1, 'insane', 'builder', SEED);
+      return rankBuilds(g, perceive(g, 1), bot).find((r) => r.type === 'factory')!.value;
+    };
+    expect(factory({ richStart: true })).toBeCloseTo(2 * factory(), 10);
   });
 });
 

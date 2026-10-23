@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../../shared/config';
+import type { MatchRules } from '../../shared/rules';
 import type { Command, Deal, Difficulty, DiplomacyRequest, GameEvent, Personality } from '../../shared/types';
 import { applyCommand } from '../core/commands';
 import type { Game } from '../core/game';
@@ -18,12 +19,13 @@ const SEED = 41;
 const DIFFICULTY_HARD_HIGH = 0.65;
 
 /** Three rows: b | a | c, a in the middle with troops to spare and c weak. */
-function middle(troops: { a?: number; b?: number; c?: number } = {}): Game {
+function middle(troops: { a?: number; b?: number; c?: number } = {}, rules?: Partial<MatchRules>): Game {
   const row = 'bbbbaaaacccc';
   return makeTestGame({
     map: [0, 1, 2].map(() => '#'.repeat(row.length)),
     owners: [0, 1, 2].map(() => row),
     nations: [{ troops: troops.a ?? 5000, gold: 0 }, { troops: troops.b ?? 4000 }, { troops: troops.c ?? 100 }],
+    rules,
   });
 }
 
@@ -170,6 +172,12 @@ describe('proposals', () => {
     g.tick += CONFIG.ai.proposalCooldownTicks;
     // and never the same proposal while the first is pending
     expect(proposeDiplomacy(g, perceive(g, 1), b).filter((c) => c.type === 'proposeAlliance')).toEqual([]);
+  });
+
+  it('with no alliances, bots propose none', () => {
+    const g = middle({ a: 5000, b: 4500 }, { noAlliances: true });
+    g.relations.set(1, 3, 'war');
+    expect(proposeDiplomacy(g, perceive(g, 1), bot(g)).filter((c) => c.type === 'proposeAlliance')).toEqual([]);
   });
 
   it('sues for peace when losing', () => {

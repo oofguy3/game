@@ -17,14 +17,15 @@ function counterpartProblem(game: Game, from: NationId, to: NationId): string | 
 
 /**
  * Sends `to` a request of `kind` from `from`, open for `requestTtlTicks`, and emits `request`. Rejected for itself, an
- * unknown or dead nation, a request of the same kind from `from` to `to` still open, an alliance with an ally, and
- * peace without a war.
+ * unknown or dead nation, an alliance when the rules have none, a request of the same kind from `from` to `to` still
+ * open, an alliance with an ally, and peace without a war.
  */
 export function createRequest(
   game: Game, kind: DiplomacyRequest['kind'], from: NationId, to: NationId, extra: { deal?: Deal; target?: NationId } = {},
 ): CommandResult {
   const problem = counterpartProblem(game, from, to);
   if (problem) return fail(problem);
+  if (kind === 'alliance' && !game.tuning.alliances) return fail('no alliances');
   for (const r of game.requests.values()) {
     if (r.kind === kind && r.from === from && r.to === to) return fail('already proposed');
   }

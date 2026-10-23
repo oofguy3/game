@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../../shared/config';
-import { DEFAULT_RULES } from '../../shared/rules';
+import { DEFAULT_RULES, PLANE_BUILDINGS } from '../../shared/rules';
 import type { MatchRules } from '../../shared/rules';
-import type { BuildingType, GameEvent, NationId, TileIndex } from '../../shared/types';
+import type { BuildingType, GameEvent, NationId, TileIndex, UnitType } from '../../shared/types';
 import { applyCommand } from '../core/commands';
-import type { Game } from '../core/game';
+import { Game } from '../core/game';
 import { scaledTicks } from '../core/tuning';
 import { tileOf } from '../map/grid';
+import { generateRandomMap } from '../map/randomMap';
+import { Match } from '../match';
+import { mapFromAscii } from '../testing/asciiMap';
 import { makeTestGame } from '../testing/fixtures';
-import { buildFighter } from './air';
-import { stepBuildings } from './buildings';
+import { buildFighter, launchBomber, launchParatroopers } from './air';
+import { canPlace, stepBuildings } from './buildings';
+import { createRequest, respond } from './diplomacy';
 import { goldIncome, maxTroops, troopGrowth } from './economy';
 import { buildWarship, payTrade } from './naval';
 import { spawnNation } from './spawn';
@@ -33,9 +37,23 @@ function place(g: Game, owner: NationId, type: BuildingType, tile: TileIndex): n
 
 const trades = (events: GameEvent[]) => events.filter((e): e is Extract<GameEvent, { type: 'trade' }> => e.type === 'trade');
 
+const PLANE_UNITS: readonly UnitType[] = ['tradePlane', 'bomber', 'paraPlane', 'fighter'];
+
 describe('custom rules', () => {
   it('a game without rules uses the defaults', () => {
     expect(makeTestGame({ map: ['##'], nations: [{}] }).rules).toEqual(DEFAULT_RULES);
+  });
+
+  it('a game keeps its own copy of the rules, and the defaults can’t be changed', () => {
+    expect(Object.isFrozen(DEFAULT_RULES)).toBe(true);
+    const map = mapFromAscii(['##']);
+    const plain = new Game({ map, seed: 1, player: null, bots: [] });
+    expect(plain.rules).toEqual(DEFAULT_RULES);
+    expect(plain.rules).not.toBe(DEFAULT_RULES);
+    const rules: MatchRules = { ...DEFAULT_RULES, richStart: true };
+    const rich = new Game({ map, seed: 1, player: null, bots: [], rules });
+    rules.richStart = false;
+    expect(rich.rules.richStart).toBe(true);
   });
 
   it('rich start: a spawn gets 5,000 gold, and income and trade gold double', () => {
@@ -143,4 +161,70 @@ describe('custom rules', () => {
     all.setOwner(99, 1);
     expect(checkVictory(all)).toEqual({ winners: [1], reason: 'landShare' });
   });
+
+  it("no planes: airports, anti-air guns and radar stations can't be built; a factory can", () => {
+    const placing = (rules?: Partial<MatchRules>) => {
+      const g = twoNations(rules);
+      const tile = tileOf(g.map, 2, 1);
+      const types = [...PLANE_BUILDINGS, 'factory' as const];
+      return Object.fromEntries(types.map((type) => [type, canPlace(g, 1, type, tile)]));
+    };
+    expect(Object.values(placing())).toEqual(Array(PLANE_BUILDINGS.length + 1).fill({ ok: true }));
+    const none = placing({ noPlanes: true });
+    for (const type of PLANE_BUILDINGS) expect(none[type]).toEqual({ ok: false, reason: 'no planes' });
+    expect(none.factory).toEqual({ ok: true });
+  });
+
+  it('no planes: no bombers, paratroopers or fighters, even with an airport', () => {
+    // each try in a game of its own, with a finished airport in the far west corner
+    const tries = (rules?: Partial<MatchRules>) => {
+      const withAirport = () => {
+        const g = twoNations(rules);
+        return { g, airport: place(g, 1, 'airport', tileOf(g.map, 0, 0)), enemy: tileOf(g.map, 8, 1) };
+      };
+      const bomber = withAirport();
+      const para = withAirport();
+      const fighter = withAirport();
+      return [
+        launchBomber(bomber.g, 1, bomber.enemy),
+        launchParatroopers(para.g, 1, para.enemy, 0.5),
+        buildFighter(fighter.g, 1, fighter.airport),
+      ];
+    };
+    expect(tries()).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+    expect(tries({ noPlanes: true })).toEqual(Array(3).fill({ ok: false, reason: 'no planes' }));
+  });
+
+  it('no alliances: alliance requests are refused; peace still works', () => {
+    expect(createRequest(twoNations(), 'alliance', 1, 2)).toEqual({ ok: true });
+    const g = twoNations({ noAlliances: true });
+    expect(createRequest(g, 'alliance', 1, 2)).toEqual({ ok: false, reason: 'no alliances' });
+    expect(g.requests.size).toBe(0);
+    g.relations.set(1, 2, 'war');
+    expect(createRequest(g, 'peace', 1, 2)).toEqual({ ok: true });
+    const [peace] = g.requests.values();
+    expect(respond(g, 2, peace.id, true)).toEqual({ ok: true });
+    expect(g.relations.get(1, 2)).toBe('neutral');
+  });
+
+  it('a 600-tick match with no planes and no alliances has no plane units and no refusals for either', () => {
+    const m = new Match({
+      map: generateRandomMap(3, 'small'),
+      seed: 3,
+      player: null,
+      bots: Array.from({ length: 8 }, () => ({ difficulty: 'hard' as const })),
+      spawnTicks: 1,
+      checkVictory: false,
+      rules: { ...DEFAULT_RULES, noPlanes: true, noAlliances: true },
+    });
+    const refused: string[] = [];
+    let planes = 0;
+    for (let i = 0; i < 600; i++) {
+      m.step();
+      for (const e of m.game.drainEvents()) if (e.type === 'rejected') refused.push(e.reason);
+      for (const u of m.game.units.values()) if (PLANE_UNITS.includes(u.type)) planes++;
+    }
+    expect(refused.filter((r) => r === 'no planes' || r === 'no alliances')).toEqual([]);
+    expect(planes).toBe(0);
+  }, 60_000);
 });

@@ -16,11 +16,14 @@ export interface MatchRules {
   winShare: 0.6 | 0.8 | 1;
 }
 
-/** Free-for-all with every switch off, won at 80% of the land: the game as it has always been. */
-export const DEFAULT_RULES: MatchRules = {
+/**
+ * Free-for-all with every switch off, won at 80% of the land: the game as it has always been. Frozen, so no game can
+ * change it.
+ */
+export const DEFAULT_RULES: Readonly<MatchRules> = Object.freeze({
   mode: 'ffa', teams: 2, capitals: false, richStart: false, fastBuilding: false, bigArmies: false, noPlanes: false,
   noAlliances: false, winShare: 0.8,
-};
+});
 
 /** The on/off fields of the rules. */
 type Switch = 'capitals' | 'richStart' | 'fastBuilding' | 'bigArmies' | 'noPlanes' | 'noAlliances';

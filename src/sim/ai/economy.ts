@@ -1,4 +1,5 @@
 import { CONFIG } from '../../shared/config';
+import { PLANE_BUILDINGS } from '../../shared/rules';
 import { BUILDING_TYPES } from '../../shared/types';
 import type { BuildingType, Command, NationId, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
@@ -22,22 +23,24 @@ export function troopGoldValue(p: Perception): number {
 
 /**
  * Every building worth building, best first, valued as benefit per gold × the matching personality weight. Per-tick
- * benefits (gold, growth) count over `buildHorizonTicks`; troops convert to gold at `troopGoldValue`. Defenses are
- * worth something only against a front threat; ports only with someone to trade with; naval bases only after an
- * invasion by sea. A first airport is worth `airportValue` a tick to a bot that flies when an enemy is within its
- * range; an anti-air gun `antiAirValue` per building of the biggest cluster an enemy airport can reach that no gun
- * covers yet; a radar `radarValue` per anti-air gun no radar covers, once there are two.
+ * benefits (gold, growth) count over `buildHorizonTicks`; troops convert to gold at `troopGoldValue`; factory and bank
+ * gold and a city's troops are scaled as the rules scale them. Defenses are worth something only against a front
+ * threat; ports only with someone to trade with; naval bases only after an invasion by sea. A first airport is worth
+ * `airportValue` a tick to a bot that flies when an enemy is within its range; an anti-air gun `antiAirValue` per
+ * building of the biggest cluster an enemy airport can reach that no gun covers yet; a radar `radarValue` per anti-air
+ * gun no radar covers, once there are two. With no planes in the rules the plane buildings are left out.
  */
 export function rankBuilds(game: Game, p: Perception, bot: Bot): BuildPlan[] {
   const B = CONFIG.buildings;
   const { buildHorizonTicks: H, defenseUrgency } = CONFIG.ai;
+  const { goldScale, troopCapScale, planes } = game.tuning;
   const w = bot.weights;
   const tgv = troopGoldValue(p);
   const threat = frontThreat(p);
   const benefit: Record<BuildingType, number> = {
-    factory: B.factory.gold * H * w.economy,
-    bank: (B.bank.gold + p.tradeIncome * B.bank.tradeBonus) * H * w.trade,
-    city: B.city.maxTroops * tgv * w.economy,
+    factory: B.factory.gold * goldScale * H * w.economy,
+    bank: (B.bank.gold * goldScale + p.tradeIncome * B.bank.tradeBonus) * H * w.trade,
+    city: B.city.maxTroops * troopCapScale * tgv * w.economy,
     barracks: p.growth * B.barracks.growthBonus * tgv * H * w.economy,
     defensePost: threat * B.defensePost.multiplier * H * defenseUrgency * w.defense,
     fortress: threat * B.fortress.multiplier * H * defenseUrgency * w.defense,
@@ -53,6 +56,7 @@ export function rankBuilds(game: Game, p: Perception, bot: Bot): BuildPlan[] {
   };
   const plans: BuildPlan[] = [];
   for (const type of BUILDING_TYPES) {
+    if (!planes && PLANE_BUILDINGS.includes(type)) continue;
     if (benefit[type] > 0) plans.push({ type, value: benefit[type] / buildingCost(game, p.me, type) });
   }
   return plans.sort((a, b) => b.value - a.value);

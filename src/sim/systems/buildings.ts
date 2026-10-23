@@ -1,4 +1,5 @@
 import { CONFIG } from '../../shared/config';
+import { PLANE_BUILDINGS } from '../../shared/rules';
 import type { BuildingType, Command, NationId, TileIndex } from '../../shared/types';
 import type { CommandResult } from '../core/commands';
 import type { Game } from '../core/game';
@@ -124,14 +125,15 @@ export function buildingCost(game: Game, nation: NationId, type: BuildingType): 
 
 /**
  * Whether `nation` may put a building of `type` on `tile`. The checks run in this order, and the first that fails
- * gives the reason: the tile is on the map, it is land, the nation owns it, it is coastal (ports and naval bases only),
- * no building of any owner stands within `minSpacing` (Chebyshev distance), and the nation can afford it. Changes
- * nothing.
+ * gives the reason: the tile is on the map, it is land, the rules allow planes (plane buildings only), the nation owns
+ * it, it is coastal (ports and naval bases only), no building of any owner stands within `minSpacing` (Chebyshev
+ * distance), and the nation can afford it. Changes nothing.
  */
 export function canPlace(game: Game, nation: NationId, type: BuildingType, tile: TileIndex): CommandResult {
   const { map } = game;
   if (!Number.isInteger(tile) || tile < 0 || tile >= map.width * map.height) return fail('off the map');
   if (!isLand(map, tile)) return fail('not land');
+  if (!game.tuning.planes && PLANE_BUILDINGS.includes(type)) return fail('no planes');
   if (game.owner[tile] !== nation) return fail('not your land');
   if (COASTAL_TYPES.includes(type) && map.coastal[tile] === 0) return fail('needs coast');
   if (buildingWithin(game, tile, CONFIG.buildings.minSpacing)) return fail('too close to another building');

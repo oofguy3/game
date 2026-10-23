@@ -72,6 +72,7 @@ function dealGain(p: Perception, deal: Deal): number {
  * - ganging up (hard and up) on a runaway leader: an alliance with the strongest neutral neighbour besides it, and a
  *   joint attack on it asked of each ally;
  * - at war with gold idle for `richIncomeTicks` of income: troops bought from the strongest nation not at war with us.
+ * With no alliances in the rules it never proposes an alliance.
  */
 export function proposeDiplomacy(game: Game, p: Perception, bot: Bot): Command[] {
   const ai = CONFIG.ai;
@@ -88,8 +89,10 @@ export function proposeDiplomacy(game: Game, p: Perception, bot: Bot): Command[]
   }
 
   const ganging = bot.profile.gangUp && p.leader !== 0 && p.leader !== me && p.leaderShare > ai.gangUpShare;
-  const partners = p.neighbors.filter((n) => n.relation === 'neutral' && game.relations.trust(me, n.id) >= ai.allyTrust
-    && !pending(game, 'alliance', me, n.id));
+  const partners = game.tuning.alliances
+    ? p.neighbors.filter((n) => n.relation === 'neutral' && game.relations.trust(me, n.id) >= ai.allyTrust
+      && !pending(game, 'alliance', me, n.id))
+    : [];
   let ally: NeighborInfo | null = null;
   if (p.wars.length > 0) ally = strongest(partners.filter((n) => n.troops >= ai.allyStrength * p.troops));
   if (ally === null && ganging) ally = strongest(partners.filter((n) => n.id !== p.leader));
