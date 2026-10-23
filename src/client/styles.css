@@ -88,6 +88,10 @@ h1, h2, .heading { font-weight: 800; letter-spacing: 0.08em; }
 .sound button.active { background: rgba(239, 68, 68, 0.35); border-color: rgba(248, 113, 113, 0.6); }
 .sound input[type='range'] { width: 90px; accent-color: var(--accent); }
 
+/* Minimap */
+.minimap { right: 12px; bottom: 150px; padding: 5px; line-height: 0; }
+.minimap canvas { display: block; border-radius: 7px; cursor: pointer; touch-action: none; }
+
 /* Event feed */
 .feed { position: absolute; left: 12px; bottom: 132px; width: 340px; pointer-events: none; display: flex; flex-direction: column; gap: 4px; }
 .feed-line {

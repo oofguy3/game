@@ -7,6 +7,7 @@ import type { Camera } from './camera';
 import type { MapInfo } from './mapInfo';
 import type { Renderer } from './render/renderer';
 import type { ClientState } from './state';
+import type { Minimap } from './ui/minimap';
 
 export type FindKind = 'unowned' | 'player' | 'enemy' | 'coastal-unowned' | 'player-interior' | 'player-coastal'
   | 'overseas-enemy' | 'bomb-target';
@@ -41,6 +42,10 @@ export interface TestApi {
   grey(): number;
   /** The sound system: the audio context's state, the settings, and the latest sounds played. */
   sound(): { state: string; muted: boolean; volume: number; played: SoundName[] };
+  /** Where the camera is: its top-left map position in tiles and its zoom. */
+  camera(): { x: number; y: number; zoom: number };
+  /** Whether the minimap shows, and how many flashes it has. */
+  minimap(): { visible: boolean; flashes: number };
 }
 
 /** What the test API reaches into. */
@@ -55,6 +60,7 @@ export interface TestHooks {
   refresh: () => void;
   mixer: Mixer;
   output: WebAudioOutput;
+  minimap: Minimap;
 }
 
 declare global {
@@ -71,7 +77,7 @@ const MAX_DEPTH = 12;
 const DISTANCE_SAMPLES = 600;
 
 /** Exposes hooks for the browser tests on `window.__test` (only with ?test=1). */
-export function installTestApi({ state, info, camera, canvas, send, renderer, refresh, mixer, output }: TestHooks): void {
+export function installTestApi({ state, info, camera, canvas, send, renderer, refresh, mixer, output, minimap }: TestHooks): void {
   const toPage = (tile: number): { x: number; y: number } => {
     const w = state.init.width;
     const p = camera.tileToScreen((tile % w) + 0.5, Math.floor(tile / w) + 0.5);
@@ -112,6 +118,8 @@ export function installTestApi({ state, info, camera, canvas, send, renderer, re
     },
     grey: () => renderer.grey,
     sound: () => ({ state: output.state, ...mixer.settings, played: [...mixer.played] }),
+    camera: () => ({ x: camera.x, y: camera.y, zoom: camera.zoom }),
+    minimap: () => ({ visible: minimap.visible, flashes: minimap.flashCount }),
   };
 }
 

@@ -25,6 +25,7 @@ import { Hud } from './ui/hud';
 import { Leaderboard } from './ui/leaderboard';
 import { PauseButton } from './ui/pauseButton';
 import { createMenu } from './ui/menu';
+import { Minimap } from './ui/minimap';
 import { RequestPopups } from './ui/requests';
 import { SoundControls } from './ui/soundControls';
 import { startBackdrop } from './ui/titleBackdrop';
@@ -156,12 +157,16 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   const diplomacy = new DiplomacyPanel(state, names, colors, send);
   const requests = new RequestPopups(state, names, send);
   const menu = new ContextMenu();
-  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, soundControls.el, feed.el, diplomacy.el, requests.el, banner, menu.el, end.el);
+  const minimap = new Minimap(state, camera, () => renderer.territoryImage(), safeStorage());
+  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, soundControls.el, feed.el, minimap.el, diplomacy.el,
+    requests.el, banner, menu.el, end.el);
   // fit the whole map in the space above the bottom bar, and keep the news feed just above it
   const hudHeight = (): number => hud.el.getBoundingClientRect().height;
   camera.fitMap(hudHeight() + HUD_GAP);
   const placeFeed = (): void => {
-    feed.el.style.bottom = `${Math.round(hudHeight() + HUD_GAP)}px`;
+    const bottom = `${Math.round(hudHeight() + HUD_GAP)}px`;
+    feed.el.style.bottom = bottom;
+    minimap.el.style.bottom = bottom;
   };
   placeFeed();
   // the bar grows once its numbers fill in, and changes with the window
@@ -190,14 +195,16 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
       menu.close();
       return open;
     },
+    toggleMinimap: () => minimap.toggle(),
   });
-  if (testMode) installTestApi({ state, info, camera, canvas, send, renderer, refresh: () => update(), mixer, output: soundOutput });
+  if (testMode) installTestApi({ state, info, camera, canvas, send, renderer, refresh: () => update(), mixer, output: soundOutput, minimap });
 
   let last = performance.now();
   const loop = (now: number): void => {
     controls!.frame(Math.min(0.1, (now - last) / 1000));
     last = now;
     renderer.draw();
+    minimap.draw(now, canvas.width, canvas.height);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
@@ -219,6 +226,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
       for (const sound of director.sounds({ events: u.events, gained: state.gained, units: state.units, buildings: u.buildings })) {
         mixer.play(sound);
       }
+      minimap.onUpdate(u.events, performance.now());
     }
     units.update(state.units, performance.now());
     hud.update();
