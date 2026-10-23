@@ -1,8 +1,8 @@
-# Untitled Conquest
+# Borderline
 
 A browser strategy game in the spirit of Roblox's "take over the world" games: start from a single spot on the world
 map or a random one, grow your territory, build an economy and an army, and take the map from up to 40 computer
-opponents. The name is a placeholder until a real one is picked (it lives in `src/shared/constants.ts`).
+opponents.
 
 **Play:** https://oofguy3.github.io/game/ (once Pages is turned on — see below)
 

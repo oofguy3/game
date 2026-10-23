@@ -1,1 +1,1 @@
-export const GAME_NAME = 'Untitled Conquest';
+export const GAME_NAME = 'Borderline';

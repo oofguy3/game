@@ -23,6 +23,7 @@ test('menu starts a game', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/game/?test=1');
+  await expect(page).toHaveTitle('Borderline');
   await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
   await page.screenshot({ path: 'test-results/menu.png' });
   await page.getByLabel('Map').selectOption('random');
