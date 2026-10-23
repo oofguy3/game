@@ -30,6 +30,8 @@ export interface TestApi {
   findWaterTile(): number | null;
   /** The land tile farthest from water. */
   findInlandTile(): number | null;
+  /** Throws the map's graphics context away, as a lost graphics chip would. */
+  loseContext(): void;
 }
 
 declare global {
@@ -83,6 +85,7 @@ export function installTestApi(
     },
     findWaterTile: () => farthestTile(info, 'water'),
     findInlandTile: () => farthestTile(info, 'land'),
+    loseContext: () => renderer.debugLoseContext(),
   };
 }
 

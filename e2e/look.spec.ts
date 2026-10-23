@@ -48,3 +48,46 @@ test('the map stays lined up after a resize and at both zoom limits', async ({ p
   }
   expect(errors).toEqual([]);
 });
+
+const PLAYER: Rgb = [0x3b, 0x82, 0xf6];
+const distance = (a: Rgb, b: Rgb): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+test("the player's land is tinted toward the player's colour", async ({ page }) => {
+  const errors = await open(page, GAME);
+  await page.waitForFunction(() => [...window.__test.state.nations.values()].filter((n) => n.spawned).length >= 4);
+  const tile = (await page.evaluate(() => window.__test.findLandTile('unowned')))!;
+  await page.evaluate((t) => window.__test.zoomTo(8, t), tile);
+  const before = await sample(page, tile);
+  const s = await page.evaluate((t) => window.__test.tileToScreen(t), tile);
+  await page.mouse.click(s.x, s.y);
+  await page.waitForFunction(() => window.__test.state.phase === 'playing', null, { timeout: 20_000 });
+  await page.waitForTimeout(1200);
+  const after = await sample(page, tile);
+  expect(distance(before, PLAYER) - distance(after, PLAYER)).toBeGreaterThan(30);
+  await page.screenshot({ path: 'test-results/look-territories.png' });
+  expect(errors).toEqual([]);
+});
+
+test('a lost graphics context falls back to the flat look and keeps drawing', async ({ page }) => {
+  const errors = await open(page, GAME);
+  expect(await page.evaluate(() => window.__test.look())).toBe('gl');
+  await page.evaluate(() => window.__test.loseContext());
+  await expect.poll(() => page.evaluate(() => window.__test.look())).toBe('flat');
+  const water = (await page.evaluate(() => window.__test.findWaterTile()))!;
+  expect(await sample(page, water)).toEqual([0x2b, 0x65, 0x96]);
+  await page.waitForTimeout(300);
+  expect(errors).toEqual([]);
+});
+
+test('drawing a frame stays cheap on the world map with 40 bots', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, '/game/?autostart=1&test=1&map=world&bots=40&difficulty=easy');
+  await page.waitForFunction(() => [...window.__test.state.nations.values()].filter((n) => n.spawned).length >= 40);
+  const s = await page.evaluate(() => window.__test.tileToScreen(window.__test.findLandTile('unowned')!));
+  await page.mouse.click(s.x, s.y);
+  await page.waitForFunction(() => window.__test.state.phase === 'playing', null, { timeout: 30_000 });
+  await page.waitForTimeout(4000);
+  const stats = await page.evaluate(() => window.__test.frameStats());
+  expect(stats.frames).toBeGreaterThan(60);
+  expect(stats.mean).toBeLessThan(8);
+});

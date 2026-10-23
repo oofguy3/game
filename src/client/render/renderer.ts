@@ -4,7 +4,9 @@ import { formatNumber } from '../format';
 import type { ClientState } from '../state';
 import type { Effects } from './effects';
 import { drawBuildingIcon } from './icons';
+import { frontTable } from './look/glMap';
 import type { GlMap, GlView } from './look/glMap';
+import { TerritoryField } from './look/territoryField';
 import { css, TERRAIN_COLORS } from './palette';
 import { TerritoryLayer } from './territoryLayer';
 import { drawUnits } from './units';
@@ -29,6 +31,10 @@ export class Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly frames: number[] = [];
   private grey = 0;
+  /** The territory for the graphics chip; only kept while there is one. */
+  private field: TerritoryField | null = null;
+  /** The fronts last sent to the graphics chip, as a key. */
+  private frontsKey = '';
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -51,6 +57,11 @@ export class Renderer {
   /** How long the last frames took to draw, in ms, oldest first. */
   get frameMs(): readonly number[] {
     return this.frames;
+  }
+
+  /** Throws the graphics context away, as a lost graphics chip would (for tests). */
+  debugLoseContext(): void {
+    this.gl?.debugLoseContext();
   }
 
   /** The flat territory picture, one pixel per tile, kept up to date in both looks. */
@@ -125,7 +136,19 @@ export class Renderer {
       this.image = new ImageData(new Uint8ClampedArray(this.layer.pixels.buffer as ArrayBuffer), init.width, init.height);
     }
     const changed = this.state.drainChangedTiles();
-    if (changed.length > 0) this.layer.applyTiles(this.state.owner, changed);
+    if (this.gl && !this.field) this.field = new TerritoryField(init.width, init.height, init.terrain);
+    if (changed.length > 0) {
+      this.layer.applyTiles(this.state.owner, changed);
+      this.field?.apply(this.state.owner, changed, performance.now() / 1000);
+    }
+    if (this.gl && this.field && !this.gl.lost) {
+      this.gl.syncTerritory(this.field);
+      const key = this.state.fronts.map(([a, b]) => `${a}>${b}`).join(',');
+      if (key !== this.frontsKey) {
+        this.frontsKey = key;
+        this.gl.setFronts(frontTable(this.state.fronts));
+      }
+    }
     const d = this.layer.dirty;
     if (d) {
       this.offscreen!.getContext('2d')!.putImageData(this.image!, 0, 0, d.x0, d.y0, d.x1 - d.x0 + 1, d.y1 - d.y0 + 1);
