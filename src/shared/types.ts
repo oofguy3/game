@@ -41,7 +41,7 @@ export type GameEvent =
   | { type: 'spawned'; nation: NationId; tile: TileIndex }
   | { type: 'phase'; phase: Phase }
   | { type: 'attackStarted'; attacker: NationId; target: NationId; troops: number }
-  | { type: 'eliminated'; nation: NationId; by: NationId }
+  | { type: 'eliminated'; nation: NationId; by: NationId } // by 0: found nowhere to start
   | { type: 'buildingDone'; nation: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildingCaptured'; from: NationId; to: NationId; building: BuildingType; tile: TileIndex }
   | { type: 'buildingDestroyed'; owner: NationId; by: NationId; building: BuildingType; tile: TileIndex }

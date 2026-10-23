@@ -127,10 +127,14 @@ None of these breaks normal play; each is a polish item or an edge case.
 - Task 10: build command doesn't validate building type at runtime (non-type key → NaN gold / throw) — typed callers only today; fix with applyCommand default-arm pass
 - Task 10: hot-path allocations in defenseMultiplier/buildingCost/stepBuildings (Task 28 perf); SHORE tests assume minSpacing ≤ 4; BuildingStore.remove mutates before detach can throw
 - Task 11: Rng salts spread over 3 files (collision only guarded by comments); DIFFICULTY/PERSONALITY mutable objects shared by reference
-- Final: "Move nearest warship here" picks the nearest warship on any sea; one on another water body is rejected 'different sea' though another could go
-- Final: build mode survives its HUD button becoming unaffordable (banner stays; next click rejected 'not enough gold')
-- Final: bots never accept peace with an overseas enemy neither side can reach by land (both estimates 0 → ours < theirs false)
 - Final: Math.hypot remains in naval.ts, units.ts, air.ts, ai/naval.ts, ai/economy.ts (engine-approximated; replays may differ between Node and a browser)
-- Final: the Ask-to-attack list can offer a target allied with the chosen ally (the sim rejects it readably)
 - Final: "Keep watching" on the defeat screen has no automated test
-- Final: a nation left landless when the spawn phase ends is marked dead without an 'eliminated' event
+
+## Fixed since the first release
+
+- One game speed: a single Pause/Resume button replaced the 1× / 2× / 4× buttons (Space still pauses).
+- "Move nearest warship here" picks the nearest warship on any sea; one on another water body is rejected 'different sea' though another could go
+- build mode survives its HUD button becoming unaffordable (banner stays; next click rejected 'not enough gold')
+- bots never accept peace with an overseas enemy neither side can reach by land (both estimates 0 → ours < theirs false)
+- the Ask-to-attack list can offer a target allied with the chosen ally (the sim rejects it readably)
+- a nation left landless when the spawn phase ends is marked dead without an 'eliminated' event

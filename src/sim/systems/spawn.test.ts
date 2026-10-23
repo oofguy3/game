@@ -374,8 +374,11 @@ describe('endSpawnPhase', () => {
     expect(g.phase).toBe('playing');
     expect(g.nations.map((n) => [n.alive, n.spawned])).toEqual([[false, false], [true, true], [false, false], [false, false]]);
     expect(g.alive().map((n) => n.id)).toEqual([1]);
+    // the two left out are knocked out by no one, and the feed hears of it
     expect(g.drainEvents()).toEqual([
       { type: 'spawned', nation: 1, tile: g.nations[1].spawnTile },
+      { type: 'eliminated', nation: 2, by: 0 },
+      { type: 'eliminated', nation: 3, by: 0 },
       { type: 'phase', phase: 'playing' },
     ]);
   });
