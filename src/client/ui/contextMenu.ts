@@ -72,17 +72,19 @@ export function menuEntries(ctx: MenuContext, tile: TileIndex): MenuEntry[] {
   const me = state.init.playerId;
   const owner = state.owner[tile];
   const land = info.isLand(tile);
-  const allied = owner !== 0 && owner !== me && state.nations.get(owner)?.relationToPlayer === 'allied';
+  const nation = owner === 0 ? undefined : state.nations.get(owner);
+  const allied = owner !== 0 && owner !== me && nation?.relationToPlayer === 'allied';
+  const shielded = owner !== 0 && owner !== me && nation?.shielded === true;
   const entries: MenuEntry[] = [];
 
   if (land && owner !== me) {
     entries.push({
-      label: 'Attack', disabled: allied, detail: allied ? 'allied' : undefined,
+      label: 'Attack', disabled: allied || shielded, detail: allied ? 'allied' : shielded ? 'protected' : undefined,
       run: () => send({ type: 'attack', nation: me, tile, ratio: ctx.ratio(), allowBoat: true }),
     });
     if (info.coastal[tile]) {
       entries.push({
-        label: 'Send boat', disabled: allied, detail: allied ? 'allied' : undefined,
+        label: 'Send boat', disabled: allied || shielded, detail: allied ? 'allied' : shielded ? 'protected' : undefined,
         run: () => send({ type: 'boat', nation: me, tile, ratio: ctx.ratio() }),
       });
     }
@@ -192,6 +194,7 @@ function airReason(ctx: MenuContext, tile: TileIndex, bomb: boolean): string | n
   if (owner === me) return 'your land';
   if (bomb && owner === 0) return 'nobody owns that';
   if (owner !== 0 && state.nations.get(owner)?.relationToPlayer === 'allied') return 'allied';
+  if (owner !== 0 && state.nations.get(owner)?.shielded) return 'protected';
   const airports = state.buildings.filter((b) => b.owner === me && b.type === 'airport' && !b.underConstruction);
   if (airports.length === 0) return 'no airport';
   const x = tile % info.width;

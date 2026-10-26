@@ -5,7 +5,7 @@ const GAME = '/game/?autostart=1&test=1&map=random&size=small&seed=7&bots=4&diff
 test('every build button shows its icon, and panels share the rounded glass style', async ({ page }) => {
   await page.goto(GAME);
   await page.waitForFunction(() => window.__test?.state.phase === 'spawn');
-  await expect(page.locator('.hud button.build canvas.build-icon')).toHaveCount(11);
+  await expect(page.locator('.hud button.build canvas.build-icon')).toHaveCount(13);
   for (const sel of ['.hud', '.leaderboard', '.pause']) {
     expect(await page.locator(sel).evaluate((el) => getComputedStyle(el).borderRadius)).toBe('12px');
   }

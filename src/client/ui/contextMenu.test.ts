@@ -72,6 +72,13 @@ describe('context menu entries', () => {
     expect(entry(s.at(4, 2), 'Attack')).toMatchObject({ disabled: true, detail: 'allied' });
   });
 
+  it('refuses an attack on a nation that still has spawn protection', () => {
+    const s = setup();
+    s.state.nations.get(2)!.shielded = true;
+    expect(entry(s.at(4, 2), 'Attack')).toMatchObject({ disabled: true, detail: 'protected' });
+    expect(entry(s.at(4, 2), 'Bomb')).toMatchObject({ disabled: true, detail: 'protected' });
+  });
+
   it('send boat only on a coast that is not ours', () => {
     const s = setup();
     expect(labels(s.at(16, 2))).toContain('Send boat');
