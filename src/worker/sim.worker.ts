@@ -1,8 +1,10 @@
 import { CONFIG } from '../shared/config';
+import { generateBoxMap } from '../sim/map/boxMap';
 import { generateRandomMap } from '../sim/map/randomMap';
 import { decodeWorldMap } from '../sim/map/worldMap';
 import { Match } from '../sim/match';
 import { buildInit, buildUpdate, lookOptions } from '../sim/snapshot';
+import { tribeCountFor } from '../sim/systems/tribes';
 import type { FromWorker, StartOptions, ToWorker } from './protocol';
 import { TickScheduler } from './scheduler';
 
@@ -36,13 +38,18 @@ function start(options: StartOptions, worldMap?: ArrayBuffer): void {
   if (match) return;
   const map = options.map.kind === 'world'
     ? decodeWorldMap(new Uint8Array(worldMap ?? new ArrayBuffer(0)))
-    : generateRandomMap(options.map.seed, options.map.size);
+    : options.map.kind === 'box'
+      ? generateBoxMap(options.map.seed, options.map.size)
+      : generateRandomMap(options.map.seed, options.map.size);
   const bots = Math.min(MAX_BOTS, Math.max(1, Math.floor(options.bots)));
   match = new Match({
     map,
     seed: options.seed,
     player: { name: options.playerName },
     bots: Array.from({ length: bots }, () => ({ difficulty: options.difficulty })),
+    tribes: tribeCountFor(options.map),
+    botNames: options.map.kind === 'world' ? 'countries' : 'invented',
+    teamMode: options.mode === 'nations',
     debug: options.debug,
   });
   const init = buildInit(match, lookOptions(options.map));
@@ -65,7 +72,10 @@ function frame(): void {
 
 function sendUpdate(m: Match): void {
   const update = buildUpdate(m);
-  ctx.postMessage({ type: 'update', update }, [update.changedTiles.buffer, update.changedOwners.buffer]);
+  const transfer: Transferable[] = [update.changedTiles.buffer, update.changedOwners.buffer];
+  if (update.falloutOn) transfer.push(update.falloutOn.buffer);
+  if (update.falloutOff) transfer.push(update.falloutOff.buffer);
+  ctx.postMessage({ type: 'update', update }, transfer);
 }
 
 function stopTicking(): void {

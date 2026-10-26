@@ -1,5 +1,6 @@
+import { CONFIG } from '../shared/config';
 import { GAME_NAME } from '../shared/constants';
-import type { BuildingType, Command, Difficulty, MapChoice, MapSize } from '../shared/types';
+import type { BuildingType, Command, Difficulty, GameMode, MapChoice, MapSize, NukeKind } from '../shared/types';
 import type { GameUpdate, InitPayload, StartOptions } from '../worker/protocol';
 import { SoundDirector } from './audio/director';
 import { Mixer } from './audio/mixer';
@@ -16,6 +17,7 @@ import { UnitInterpolator } from './render/units';
 import { ClientState } from './state';
 import { safeStorage } from './storage';
 import { installTestApi } from './testApi';
+import { AttacksPanel } from './ui/attacksPanel';
 import { ContextMenu, menuEntries } from './ui/contextMenu';
 import { DiplomacyPanel } from './ui/diplomacyPanel';
 import { h, setText } from './ui/dom';
@@ -63,7 +65,12 @@ else {
 function optionsFromUrl(p: URLSearchParams): StartOptions {
   const seed = Math.max(1, Math.round(Number(p.get('seed')) || 1));
   const size = (['small', 'medium', 'large'].includes(p.get('size') ?? '') ? p.get('size') : 'medium') as MapSize;
-  const map: MapChoice = p.get('map') === 'world' ? { kind: 'world' } : { kind: 'random', size, seed };
+  const map: MapChoice = p.get('map') === 'world'
+    ? { kind: 'world' }
+    : p.get('map') === 'box'
+      ? { kind: 'box', size, seed }
+      : { kind: 'random', size, seed };
+  const mode: GameMode = p.get('mode') === 'nations' ? 'nations' : 'ffa';
   const difficulty = (['easy', 'normal', 'hard', 'insane'].includes(p.get('difficulty') ?? '') ? p.get('difficulty') : 'normal') as Difficulty;
   return {
     map,
@@ -72,6 +79,7 @@ function optionsFromUrl(p: URLSearchParams): StartOptions {
     seed,
     playerName: p.get('name') || 'You',
     debug: testMode,
+    mode,
   };
 }
 
@@ -155,13 +163,18 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   const leaderboard = new Leaderboard(state);
   const feed = new EventFeed(state, names);
   const end = new EndScreen(state, Math.max(1, land), backToMenu, (on) => renderer.setGrey(on), colors.get(init.playerId) ?? 0x3b82f6);
-  const banner = h('div', { class: 'banner' });
+  const banner = h('div', { class: 'banner stack' });
+  const bannerKicker = h('div', { class: 'banner-kicker' });
+  const bannerText = h('div');
+  banner.append(bannerKicker, bannerText);
+  state.coast = info.coastal;
+  const attacks = new AttacksPanel(state, names);
   const diplomacy = new DiplomacyPanel(state, names, colors, send);
   const requests = new RequestPopups(state, names, send);
   const menu = new ContextMenu();
   const minimap = new Minimap(state, camera, () => renderer.territoryImage(), safeStorage());
-  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, soundControls.el, feed.el, minimap.el, diplomacy.el,
-    requests.el, banner, menu.el, end.el);
+  document.querySelector('.app')!.append(hud.el, leaderboard.el, pause.el, soundControls.el, feed.el, minimap.el, attacks.el,
+    diplomacy.el, requests.el, banner, menu.el, end.el);
   // fit the whole map in the space above the bottom bar, and keep the news feed just above it
   const hudHeight = (): number => hud.el.getBoundingClientRect().height;
   camera.fitMap(hudHeight() + HUD_GAP);
@@ -183,7 +196,10 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
     const current = controls.mode;
     controls.setMode(current.kind === 'build' && current.building === type ? { kind: 'default' } : { kind: 'build', building: type });
   }
-  const menuContext = { state, info, send, ratio: () => hud.attackRatio, openDiplomacy: (id: number) => diplomacy.open(id) };
+  const menuContext = {
+    state, info, send, ratio: () => hud.attackRatio, openDiplomacy: (id: number) => diplomacy.open(id),
+    aimNuke: (kind: NukeKind) => controls?.setMode({ kind: 'target', action: 'nuke', nuke: kind }),
+  };
   controls = new Controls(canvas, camera, state, {
     send,
     attackRatio: () => hud.attackRatio,
@@ -211,15 +227,58 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
   };
   requestAnimationFrame(loop);
 
+  let warUntil = 0;
+  let warDismissed = false;
+  let seaUntil = 0;
   const updateBanner = (): void => {
+    const mode = controls?.mode;
+    const show = (kicker: string, text: string, kind: 'war' | 'alert' | ''): void => {
+      setText(bannerKicker, kicker);
+      setText(bannerText, text);
+      banner.classList.toggle('war', kind === 'war');
+      banner.classList.toggle('alert', kind === 'alert');
+      bannerKicker.classList.toggle('hidden', kicker === '');
+      banner.classList.remove('hidden');
+    };
+    if (mode?.kind === 'build') {
+      warDismissed = true;
+      show('', 'Click your land to place it — Esc to cancel', '');
+      return;
+    }
+    if (mode?.kind === 'target' && mode.action === 'nuke') {
+      warDismissed = true;
+      const kind = mode.nuke === 'hydrogen' ? 'hydrogen bomb' : mode.nuke === 'mirv' ? 'MIRV' : 'atom bomb';
+      show('', `Click the target for the ${kind} — Esc to cancel`, '');
+      return;
+    }
     if (state.phase === 'spawn') {
       const secs = Math.max(0, Math.ceil((init.spawnEndsAt - state.tick) / 10));
       const picked = (state.player?.tiles ?? 0) > 0;
-      setText(banner, picked ? `Good spot! The war starts in ${secs}s — click again to move.` : `Click where you want to start — ${secs}s left`);
-      banner.classList.remove('hidden');
-    } else if (controls?.mode.kind === 'build') {
-      setText(banner, 'Click your land to place it — Esc to cancel');
-      banner.classList.remove('hidden');
+      show(
+        'CHOOSE YOUR STARTING LOCATION',
+        picked ? `Capital set. The war starts in ${secs}s — tap again to move.` : `Tap any unclaimed land to place your capital — ${secs}s`,
+        '',
+      );
+      return;
+    }
+    const now = performance.now();
+    if (state.phase === 'playing' && warUntil === 0) warUntil = now + 4000;
+    const shieldTicks = init.spawnEndsAt + CONFIG.spawn.protectTicks - state.tick;
+    const shielded = (state.player?.shielded ?? false) && shieldTicks > 0;
+    const underAttack = state.fronts.some(([, target]) => target === state.init.playerId);
+    // Hold the sea hint until the opening banner's window has passed, so placing a building
+    // during those first seconds doesn't uncover it.
+    if (state.announceSea && warUntil > 0 && now >= warUntil && !underAttack) {
+      state.announceSea = false;
+      seaUntil = now + 7000;
+    }
+    if (!warDismissed && warUntil > now) {
+      const extra = shielded ? `Spawn protection ${Math.ceil(shieldTicks / 10)}s — attacking a nation ends it.` : 'Take the empty land.';
+      show('THE WAR BEGINS', extra, 'war');
+    } else if (underAttack) {
+      show('YOU ARE UNDER ATTACK', 'A nation is on your border.', 'alert');
+    } else if (seaUntil > now) {
+      show('', 'You reached the sea. Click a distant coast to send a boat invasion.', '');
     } else banner.classList.add('hidden');
   };
   /** Refreshes everything; with the update that just arrived, also plays its sounds. */
@@ -239,6 +298,7 @@ function buildGame(canvas: HTMLCanvasElement, glCanvas: HTMLCanvasElement, state
     requests.update();
     leaderboard.update();
     feed.update();
+    attacks.update();
     end.update();
     updateBanner();
   };

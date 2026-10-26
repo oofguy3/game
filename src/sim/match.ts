@@ -3,6 +3,7 @@ import { Bot } from './ai/bot';
 import { PERSONALITIES } from './ai/profile';
 import { chooseSpawn } from './ai/spawn';
 import { Game } from './core/game';
+import { placeTribes } from './systems/tribes';
 import type { GameSetup } from './core/game';
 import { Rng } from './util/rng';
 
@@ -58,6 +59,7 @@ export class Match {
    */
   private spawnBots(): void {
     this.botsSpawned = true;
+    placeTribes(this.game);
     const picked: number[] = [];
     for (const bot of this.bots) {
       const tile = chooseSpawn(this.game, bot.id, bot.profile, bot.rng, picked);

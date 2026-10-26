@@ -54,14 +54,33 @@ export function randomSpawnTile(game: Game, rng: Rng, spacing: number = game.spa
 export function endSpawnPhase(game: Game): void {
   for (const nation of game.nations) {
     if (!nation.alive || nation.spawned) continue;
+    if (nation.role === 'tribe') {
+      nation.alive = false;
+      game.emit({ type: 'eliminated', nation: nation.id, by: 0 });
+      continue;
+    }
     const tile = randomSpawnTile(game, game.rng);
     if (tile === null) {
       nation.alive = false;
       game.emit({ type: 'eliminated', nation: nation.id, by: 0 });
     } else placeSpawn(game, nation, tile);
   }
+  if (game.teamMode) allyNations(game);
+  game.protectUntil = game.tick + CONFIG.spawn.protectTicks;
   game.phase = 'playing';
   game.emit({ type: 'phase', phase: 'playing' });
+}
+
+/** In Humans vs Nations, every living bot starts allied with the others. The player and the tribes stay outside it. */
+function allyNations(game: Game): void {
+  const ids = game.nations.filter((n) => n.alive && n.role !== 'tribe' && !n.isPlayer).map((n) => n.id);
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      if (game.relations.get(ids[i], ids[j]) === 'allied') continue;
+      game.relations.set(ids[i], ids[j], 'allied');
+      game.emit({ type: 'relation', a: ids[i], b: ids[j], relation: 'allied' });
+    }
+  }
 }
 
 /** Releases the nation's previous disk, claims the free land of the new one and gives the start resources. */

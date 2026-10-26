@@ -1,4 +1,4 @@
-import type { NationId, TileIndex, UnitType } from '../../shared/types';
+import type { NationId, NukeKind, TileIndex, UnitType } from '../../shared/types';
 import type { Game } from '../core/game';
 import type { GameMap } from '../map/gameMap';
 import { xOf, yOf } from '../map/grid';
@@ -32,6 +32,10 @@ export interface Unit {
   warned: Set<NationId>;
   /** For trade units: who owned the destination when it set out (the trade only pays if they still do). */
   partner: NationId;
+  /** Tiles per tick for missiles. 0 means the unit's own rules decide. */
+  speed: number;
+  /** Set on missiles: which bomb it is and how wide the fallout disk is. */
+  payload: { kind: NukeKind; radius: number } | null;
 }
 
 type UnitInit = Pick<Unit, 'type' | 'owner' | 'x' | 'y'> & Partial<Unit>;
@@ -40,7 +44,7 @@ type UnitInit = Pick<Unit, 'type' | 'owner' | 'x' | 'y'> & Partial<Unit>;
 export function spawnUnit(game: Game, init: UnitInit): Unit {
   const unit: Unit = {
     id: game.nextId(), hp: 1, troops: 0, path: [], pathIndex: 0, targetTile: -1, homeId: null, destId: null,
-    patrol: null, cooldown: 0, mission: 'outbound', warned: new Set(), partner: 0, ...init,
+    patrol: null, cooldown: 0, mission: 'outbound', warned: new Set(), partner: 0, speed: 0, payload: null, ...init,
   };
   game.units.set(unit.id, unit);
   return unit;
@@ -82,6 +86,7 @@ export function stepUnits(game: Game): void {
   spawnTradePlanes(game);
   for (const u of [...game.units.values()]) {
     if (!game.units.has(u.id)) continue; // removed earlier this tick
+    if (u.type === 'missile') continue;
     if (u.type === 'troopBoat') stepTroopBoat(game, u);
     else if (u.type === 'tradeShip') stepTradeShip(game, u);
     else if (u.type === 'warship') stepWarship(game, u);

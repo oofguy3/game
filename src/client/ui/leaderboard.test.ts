@@ -21,6 +21,12 @@ describe('leaderboardRows', () => {
     expect(rows.slice(0, 10).map((r) => r.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
+  it('leaves tribes off the board', () => {
+    const tribe = snap(3, 50);
+    tribe.role = 'tribe';
+    expect(leaderboardRows([snap(1, 5), tribe, snap(2, 9)], 1, 10).map((r) => r.id)).toEqual([2, 1]);
+  });
+
   it('keeps a defeated player on the board', () => {
     const rows = leaderboardRows([snap(1, 0, false), snap(2, 9)], 1, 10);
     expect(rows.map((r) => r.id)).toEqual([2, 1]);

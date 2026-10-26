@@ -9,7 +9,7 @@ const ROWS = 10;
 
 /** The biggest `limit` living nations by land (ties by id), plus the player's row when they're not among them. */
 export function leaderboardRows(nations: NationSnap[], playerId: NationId, limit: number): NationSnap[] {
-  const rows = nations.filter((n) => n.alive).sort((a, b) => b.tiles - a.tiles || a.id - b.id).slice(0, limit);
+  const rows = nations.filter((n) => n.alive && n.role !== 'tribe').sort((a, b) => b.tiles - a.tiles || a.id - b.id).slice(0, limit);
   const player = nations.find((n) => n.id === playerId);
   if (player && !rows.includes(player)) rows.push(player);
   return rows;
@@ -41,8 +41,11 @@ export class Leaderboard {
       const row = this.body.children[i] as HTMLElement;
       const [swatch, name, land, troops] = [...row.children] as HTMLElement[];
       swatch.style.background = css(info.get(n.id)?.color ?? 0x808080);
-      setText(name, info.get(n.id)?.name ?? '?');
-      setText(land, `${((n.tiles / this.landCount) * 100).toFixed(1)}%`);
+      const label = info.get(n.id)?.name ?? '?';
+      setText(name, n.traitor ? `${label} (TRAITOR)` : label);
+      const held = n.scoreTiles ?? n.tiles;
+      const denom = Math.max(1, this.landCount - this.state.falloutList.length);
+      setText(land, `${((held / denom) * 100).toFixed(1)}%`);
       setText(troops, formatNumber(n.troops));
       row.classList.toggle('me', n.id === state.init.playerId);
       row.classList.toggle('dead', !n.alive);

@@ -4,6 +4,7 @@ import { buildFighter, launchBomber, launchParatroopers } from '../systems/air';
 import { attackCommand } from '../systems/attacks';
 import { build } from '../systems/buildings';
 import { breakAlliance, createRequest, proposeDeal, requestJointAttack, respond, setEmbargo } from '../systems/diplomacy';
+import { cleanFallout, launchNuke } from '../systems/nukes';
 import { buildWarship, launchBoat, moveWarship } from '../systems/naval';
 import { spawnNation } from '../systems/spawn';
 import type { Game } from './game';
@@ -89,6 +90,10 @@ export function applyCommand(game: Game, cmd: Command): CommandResult {
       return settle(game, nation, proposeDeal(game, nation, cmd.to, cmd.deal));
     case 'requestJointAttack':
       return settle(game, nation, requestJointAttack(game, nation, cmd.to, cmd.target));
+    case 'nuke':
+      return settle(game, nation, launchNuke(game, nation, cmd.tile, cmd.kind));
+    case 'clean':
+      return settle(game, nation, cleanFallout(game, nation, cmd.tile));
   }
 }
 

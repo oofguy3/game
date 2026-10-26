@@ -45,7 +45,7 @@ export class Effects {
   onEvents(events: GameEvent[], now: number): void {
     const { width } = this.state.init;
     for (const e of events) {
-      if (e.type === 'bombed') this.flashes.push({ x: e.tile % width, y: Math.floor(e.tile / width), start: now });
+      if (e.type === 'bombed' || e.type === 'nuked') this.flashes.push({ x: e.tile % width, y: Math.floor(e.tile / width), start: now });
       else if (e.type === 'radarWarning' && e.nation === this.state.init.playerId) {
         this.warnings.push({ from: e.from, unit: e.unit, x: e.tile % width, y: Math.floor(e.tile / width), start: now, seen: now });
       }

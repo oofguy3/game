@@ -8,6 +8,7 @@ import { adjacentWater, findWaterPath } from '../map/waterNav';
 import { landTroops } from './attacks';
 import type { Building } from './buildings';
 import { tradeMultiplier } from './economy';
+import { commitHostility, shieldBlock } from './protection';
 import { canTrade, declareWar } from './relations';
 import { advanceAlongPath, countUnits, pathLength, removeUnit, spawnUnit } from './units';
 import type { Unit } from './units';
@@ -31,6 +32,8 @@ export function launchBoat(game: Game, nation: NationId, target: TileIndex, troo
   const owner = game.owner[target];
   if (owner === nation) return fail('own tile');
   if (owner !== 0 && game.relations.get(nation, owner) === 'allied') return fail('allied');
+  const blocked = shieldBlock(game, owner);
+  if (blocked) return fail(blocked);
   if (map.coastal[target] === 0) return fail('not coastal');
   if (!(troops >= 1)) return fail('not enough troops');
   const n = game.nations[nation];
@@ -39,7 +42,10 @@ export function launchBoat(game: Game, nation: NationId, target: TileIndex, troo
   const route = seaRoute(game, nation, target);
   if (route === null) return fail('no sea route');
   n.troops -= troops;
-  if (owner !== 0) declareWar(game, nation, owner);
+  if (owner !== 0) {
+    commitHostility(game, nation, owner);
+    declareWar(game, nation, owner);
+  }
   spawnUnit(game, {
     type: 'troopBoat', owner: nation, x: xOf(map, route.from), y: yOf(map, route.from), troops,
     path: route.path, targetTile: target,

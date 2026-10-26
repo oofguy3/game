@@ -26,7 +26,10 @@ function setup() {
   const { state, info } = makeClientState(MAP, OWNERS);
   const sent: Command[] = [];
   const opened: number[] = [];
-  const ctx = { state, info, send: (c: Command) => sent.push(c), ratio: () => 0.3, openDiplomacy: (id: number) => opened.push(id) };
+  const ctx = {
+    state, info, send: (c: Command) => sent.push(c), ratio: () => 0.3,
+    openDiplomacy: (id: number) => opened.push(id), aimNuke: () => {},
+  };
   return { state, info, sent, opened, at: (x: number, y: number) => menuEntries(ctx, tile(x, y)) };
 }
 
@@ -83,7 +86,7 @@ describe('context menu entries', () => {
     s.state.nations.get(1)!.gold = 2000;
     const build = entry(s.at(2, 2), 'Build')!;
     expect(build.submenu!.map((e) => e.label)).toEqual(['City', 'Factory', 'Barracks', 'Bank', 'Defense post', 'Fortress',
-      'Port', 'Naval base', 'Airport', 'Anti-air gun', 'Radar station']);
+      'Port', 'Naval base', 'Airport', 'Anti-air gun', 'Radar station', 'Silo', 'SAM']);
     expect(entry(build.submenu!, 'City')).toMatchObject({ disabled: false, detail: '1k' });
     expect(entry(build.submenu!, 'Fortress')).toMatchObject({ disabled: true });
     // (2,2) is inland: no port there
@@ -131,7 +134,7 @@ describe('context menu entries', () => {
     const owners = ['....................', '.aaaaaaa............', '.a...aaa............', '.a...aaa............', '.aaaaaaa............', '....................', '....................'];
     const { state, info } = makeClientState(map, owners);
     const sent: Command[] = [];
-    const ctx = { state, info, send: (c: Command) => sent.push(c), ratio: () => 0.3, openDiplomacy: () => {} };
+    const ctx = { state, info, send: (c: Command) => sent.push(c), ratio: () => 0.3, openDiplomacy: () => {}, aimNuke: () => {} };
     const lake = { id: 31, type: 'warship' as const, owner: 1, x: 3, y: 2, troops: 0 };
     const sea = { id: 32, type: 'warship' as const, owner: 1, x: 14, y: 6, troops: 0 };
     // the lake ship is nearer, but only the sea ship can sail to the sea

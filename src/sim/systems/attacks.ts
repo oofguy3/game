@@ -6,6 +6,7 @@ import { forEachNeighbor, isLand } from '../map/grid';
 import { MaxHeap } from '../util/heap';
 import { defenderLossPerTile, isTargetTile, tileCaptureCost } from './combat';
 import { launchBoat } from './naval';
+import { commitHostility, isShielded, shieldBlock } from './protection';
 import { declareWar } from './relations';
 
 export interface Attack {
@@ -46,9 +47,12 @@ export function startAttack(
 ): CommandResult {
   if (target === attacker) return fail('own tile');
   if (target !== 0 && game.relations.get(attacker, target) === 'allied') return fail('allied');
+  const blocked = shieldBlock(game, target);
+  if (blocked) return fail(blocked);
   if (seedTile === undefined && !sharesBorder(game, attacker, target)) return fail('not adjacent');
   if (!(troops >= 1)) return fail('not enough troops');
 
+  commitHostility(game, attacker, target);
   game.nations[attacker].troops -= troops;
   declareWar(game, attacker, target);
   game.emit({ type: 'attackStarted', attacker, target, troops });
@@ -146,6 +150,10 @@ export function landTroops(game: Game, nation: NationId, tile: TileIndex, troops
   }
   const owner = game.owner[tile];
   if (owner === nation || (owner !== 0 && game.relations.get(nation, owner) === 'allied')) {
+    lander.troops += troops;
+    return;
+  }
+  if (owner !== 0 && isShielded(game, owner)) {
     lander.troops += troops;
     return;
   }

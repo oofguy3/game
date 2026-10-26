@@ -1,5 +1,5 @@
 import { BUILDING_TYPES } from '../shared/types';
-import type { BuildingType, Command } from '../shared/types';
+import type { BuildingType, Command, NukeKind } from '../shared/types';
 import type { Camera } from './camera';
 import type { ClientState } from './state';
 import { BUILD_HOTKEYS } from './ui/hud';
@@ -7,7 +7,7 @@ import { BUILD_HOTKEYS } from './ui/hud';
 export type Mode =
   | { kind: 'default' }
   | { kind: 'build'; building: BuildingType }
-  | { kind: 'target'; action: 'bomb' | 'paradrop' | 'boat' };
+  | { kind: 'target'; action: 'bomb' | 'paradrop' | 'boat' | 'nuke'; nuke?: NukeKind };
 
 export interface ControlActions {
   send(cmd: Command): void;
@@ -39,6 +39,8 @@ export class Controls {
   mode: Mode = { kind: 'default' };
   private down: { x: number; y: number; lastX: number; lastY: number; dragging: boolean } | null = null;
   private readonly held = new Set<string>();
+  private touchTimer = 0;
+  private suppressClick = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -64,6 +66,10 @@ export class Controls {
     window.addEventListener('mouseup', (e) => {
       const d = this.down;
       this.down = null;
+      if (this.suppressClick) {
+        this.suppressClick = false;
+        return;
+      }
       if (d && !d.dragging && e.button === 0) this.click(d.x, d.y);
     });
     canvas.addEventListener('wheel', (e) => {
@@ -76,6 +82,20 @@ export class Controls {
       const tile = this.tileAt(e.offsetX, e.offsetY);
       if (tile !== null) this.actions.openMenu(tile, e.clientX, e.clientY);
     });
+    // A long press is the phone's right-click: the build, nuke and diplomacy menu.
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const p = this.localPoint(touch.clientX, touch.clientY);
+      window.clearTimeout(this.touchTimer);
+      this.touchTimer = window.setTimeout(() => {
+        this.suppressClick = true;
+        const tile = this.tileAt(p.x, p.y);
+        if (tile !== null) this.actions.openMenu(tile, touch.clientX, touch.clientY);
+      }, 480);
+    }, { passive: true });
+    canvas.addEventListener('touchmove', () => window.clearTimeout(this.touchTimer), { passive: true });
+    canvas.addEventListener('touchend', () => window.clearTimeout(this.touchTimer));
     window.addEventListener('keydown', (e) => this.keyDown(e));
     window.addEventListener('keyup', (e) => this.held.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => this.held.clear());
@@ -125,6 +145,7 @@ export class Controls {
     else if (mode.kind === 'target') {
       if (mode.action === 'bomb') this.actions.send({ type: 'bomb', nation, tile });
       else if (mode.action === 'paradrop') this.actions.send({ type: 'paradrop', nation, tile, ratio });
+      else if (mode.action === 'nuke' && mode.nuke) this.actions.send({ type: 'nuke', nation, tile, kind: mode.nuke });
       else this.actions.send({ type: 'boat', nation, tile, ratio });
     } else this.actions.send({ type: 'attack', nation, tile, ratio, allowBoat: true });
     if (mode.kind !== 'default') this.setMode({ kind: 'default' });
@@ -153,7 +174,11 @@ export class Controls {
   }
 
   private local(e: MouseEvent): { x: number; y: number } {
+    return this.localPoint(e.clientX, e.clientY);
+  }
+
+  private localPoint(clientX: number, clientY: number): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    return { x: clientX - r.left, y: clientY - r.top };
   }
 }

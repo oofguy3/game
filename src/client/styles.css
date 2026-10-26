@@ -104,7 +104,14 @@ h1, h2, .heading { font-weight: 800; letter-spacing: 0.08em; }
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
   background: var(--glass-strong); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
   padding: 8px 18px; font-weight: 600; pointer-events: none; white-space: nowrap;
+  text-align: center; z-index: 6;
 }
+.banner.stack { white-space: normal; max-width: min(640px, 92vw); border-radius: 16px; }
+.banner-kicker { display: block; font-size: 12px; letter-spacing: 0.14em; color: #fde68a; font-weight: 800; }
+.banner-kicker.hidden { display: none; }
+.banner.war { background: rgba(127, 29, 29, 0.94); border-color: rgba(254, 202, 202, 0.7); }
+.banner.alert { background: rgba(127, 29, 29, 0.96); border-color: #fca5a5; animation: alert-pulse 1s ease-in-out infinite; }
+@keyframes alert-pulse { 50% { transform: translateX(-50%) scale(1.03); } }
 .banner.error { background: rgba(127, 29, 29, 0.95); top: 60px; white-space: normal; max-width: 90vw; pointer-events: auto; }
 
 /* HUD */
@@ -122,7 +129,7 @@ h1, h2, .heading { font-weight: 800; letter-spacing: 0.08em; }
 .stat.attack { flex-direction: row; align-items: center; gap: 8px; }
 .stat.attack .stat-label { margin-right: 4px; }
 .stat.attack input { width: 180px; accent-color: var(--accent); }
-.builds { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; }
+.builds { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 6px; }
 button.build { display: flex; flex-direction: column; align-items: center; padding: 4px 2px; font-size: 12px; position: relative; }
 button.build .build-icon { margin: 2px 0 1px; }
 button.build .key { position: absolute; top: 2px; left: 5px; font-size: 10px; color: var(--muted); }
@@ -141,6 +148,11 @@ button.build.selected { outline: 2px solid var(--accent); background: rgba(59, 1
 .menu-back { color: var(--muted); }
 
 /* Diplomacy panel */
+.attacks { top: 64px; left: 12px; width: 250px; max-height: 32vh; overflow: auto; z-index: 4; }
+.attacks .panel-title.hit { color: #fecaca; letter-spacing: 0.04em; }
+.attack-row { font-size: 13px; padding: 2px 0; }
+.attack-row.incoming { color: #fecaca; font-weight: 700; }
+.attack-row.outgoing { color: #bfdbfe; }
 .diplomacy { top: 64px; left: 12px; width: 300px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
 .diplomacy-head { display: flex; align-items: center; gap: 8px; }
 .diplomacy-head .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
@@ -249,7 +261,9 @@ canvas.map.grey { filter: grayscale(1); }
 .end-buttons { display: flex; gap: 8px; justify-content: flex-end; }
 
 @media (max-width: 900px) {
-  .builds { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .builds { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .attacks { width: min(220px, 58vw); top: 56px; max-height: 24vh; }
+  .banner.stack { top: 8px; padding: 6px 12px; font-size: 13px; }
   .leaderboard { width: 200px; }
   .feed { width: 260px; bottom: 190px; }
   .requests { right: 224px; width: 240px; }

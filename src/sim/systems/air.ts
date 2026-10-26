@@ -9,6 +9,7 @@ import { buildingsInRadius, destroyBuilding } from './buildings';
 import type { Building } from './buildings';
 import { density } from './combat';
 import { payTrade } from './naval';
+import { commitHostility, shieldBlock } from './protection';
 import { canTrade, declareWar } from './relations';
 import { advanceAlongPath, removeUnit, spawnUnit } from './units';
 import type { Unit } from './units';
@@ -57,6 +58,8 @@ export function launchBomber(game: Game, nation: NationId, tile: TileIndex): Com
   if (owner === nation) return fail('own tile');
   if (owner === 0) return fail('nobody owns that');
   if (game.relations.get(nation, owner) === 'allied') return fail('allied');
+  const blocked = shieldBlock(game, owner);
+  if (blocked) return fail(blocked);
   const airport = missionAirport(game, nation, tile);
   if (typeof airport === 'string') return fail(airport);
   const { cost, cooldownTicks, hp } = CONFIG.units.bomber;
@@ -64,6 +67,7 @@ export function launchBomber(game: Game, nation: NationId, tile: TileIndex): Com
   if (n.gold < cost) return fail('not enough gold');
   n.gold -= cost;
   airport.cooldown = cooldownTicks;
+  commitHostility(game, nation, owner);
   declareWar(game, nation, owner);
   launch(game, 'bomber', nation, airport, tile, { hp });
   return { ok: true };
@@ -79,6 +83,8 @@ export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex
   const owner = game.owner[tile];
   if (owner === nation) return fail('own tile');
   if (owner !== 0 && game.relations.get(nation, owner) === 'allied') return fail('allied');
+  const blocked = shieldBlock(game, owner);
+  if (blocked) return fail(blocked);
   const airport = missionAirport(game, nation, tile);
   if (typeof airport === 'string') return fail(airport);
   const { cost, cooldownTicks, hp, maxTroopsShare } = CONFIG.units.paraPlane;
@@ -89,7 +95,10 @@ export function launchParatroopers(game: Game, nation: NationId, tile: TileIndex
   n.gold -= cost;
   n.troops -= troops;
   airport.cooldown = cooldownTicks;
-  if (owner !== 0) declareWar(game, nation, owner);
+  if (owner !== 0) {
+    commitHostility(game, nation, owner);
+    declareWar(game, nation, owner);
+  }
   launch(game, 'paraPlane', nation, airport, tile, { hp, troops });
   return { ok: true };
 }

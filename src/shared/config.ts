@@ -8,7 +8,10 @@ export const CONFIG = {
     spacingSharesPerNation: 4,
     // random spawns: land tiles tried per spacing level, and the factor the spacing shrinks by when none qualifies
     randomSamples: 2000, spacingRelax: 0.75,
+    /** Ticks after the war begins during which nations that have not attacked another nation cannot be attacked. */
+    protectTicks: 600,
   },
+  tribes: { radius: 2, troops: 800, gold: 0, spacing: 16, thinkTicks: 15, expandRatio: 0.4 },
   win: { landShare: 0.8 },
   troops: { baseMax: 5000, perTile: 40, baseGrowth: 2, growthRate: 0.02, overMaxDecay: 0.01 },
   // tradeIncomeDecay: per-tick factor of the trade income moving average; trade gold adds gold × (1 − it)
@@ -31,6 +34,18 @@ export const CONFIG = {
     airport: { cost: 5000, buildTicks: 100, range: 150, tradeEveryTicks: 200 },
     antiAir: { cost: 2500, buildTicks: 50, radius: 20, hitChance: 0.15 },
     radar: { cost: 3000, buildTicks: 60, radius: 60, boost: 1.5 },
+    missileSilo: { cost: 12000, buildTicks: 100 },
+    samLauncher: { cost: 7000, buildTicks: 60, radius: 18 },
+  },
+  nukes: {
+    atom: { cost: 25000, radius: 6, speed: 8 },
+    hydrogen: { cost: 55000, radius: 12, speed: 6 },
+    mirv: { cost: 90000, radius: 5, speed: 8, warheads: 3, spread: 7 },
+    /** Ticks a silo must rest after it fires. Each silo has its own timer, so another silo can fire sooner. */
+    cooldownTicks: 250,
+    /** Gold to scrub one fallout tile. */
+    cleanCost: 500,
+    cleanRadius: 3,
   },
   units: {
     troopBoat: { speed: 1.0, baseCap: 3 },
@@ -42,7 +57,11 @@ export const CONFIG = {
     paraPlane: { cost: 1500, speed: 2, hp: 3, maxTroopsShare: 0.3, cooldownTicks: 100 },
     fighter: { cost: 3000, buildTicks: 60, speed: 3, hp: 4, range: 30, detect: 25, hitChance: 0.3 },
   },
-  diplomacy: { requestTtlTicks: 300, defaultTrust: 0.5, betrayalTrustPenalty: 0.5, trustRecoveryPerTick: 0.0005 },
+  diplomacy: {
+    requestTtlTicks: 300, defaultTrust: 0.5, betrayalTrustPenalty: 0.5, trustRecoveryPerTick: 0.0005,
+    /** How long a nation that broke an alliance is marked TRAITOR, and the capture-cost multiplier against it. */
+    traitorTicks: 300, traitorAttackCost: 0.5,
+  },
   ai: { buildingTileValue: 40, neutralBias: 1.5, minAttackScore: 0.01, secondFrontPenalty: 0.4, gangUpShare: 0.35,
         counterRiskWeight: 1, minParaTroops: 2000, proposalCooldownTicks: 300, saveHorizonTicks: 300,
         // shared-border tiles per neighbour whose defense multiplier perception averages

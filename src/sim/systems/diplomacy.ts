@@ -167,6 +167,7 @@ export function breakAlliance(game: Game, nation: NationId, other: NationId): Co
     relations.setTrust(t, nation, Math.max(0, relations.trust(t, nation) - CONFIG.diplomacy.betrayalTrustPenalty));
   }
   relations.setTrust(other, nation, 0);
+  game.nations[nation].traitorUntil = game.tick + CONFIG.diplomacy.traitorTicks;
   game.emit({ type: 'betrayal', betrayer: nation, victim: other });
   return { ok: true };
 }

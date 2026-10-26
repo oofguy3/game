@@ -2,6 +2,7 @@ import { CONFIG } from '../../shared/config';
 import type { Command, Difficulty, NationId, Personality, TileIndex } from '../../shared/types';
 import type { Game } from '../core/game';
 import { buildingCost } from '../systems/buildings';
+import { isShielded } from '../systems/protection';
 import { Rng } from '../util/rng';
 import { chooseParadrop, manageAirDefense, planCombinedArms } from './air';
 import { considerBetrayal, evaluateRequest, proposeDiplomacy } from './diplomacy';
@@ -110,7 +111,9 @@ export class Bot {
     };
     const allowed = (cmd: Command): boolean => {
       const target = aimedAt(cmd);
-      return target === null || !spared(target);
+      if (target === null || spared(target)) return target === null;
+      // The opening shield refuses the attack outright, so don't spend the turn on it.
+      return !isShielded(game, target);
     };
 
     let spent = 0;
@@ -160,7 +163,7 @@ export class Bot {
     manageWarships(game, p, this).forEach(issue);
     manageAirDefense(game, p, this).forEach(issue);
 
-    const traitorTo = considerBetrayal(game, p, this);
+    const traitorTo = game.teamMode ? null : considerBetrayal(game, p, this);
     if (traitorTo !== null) {
       issue({ type: 'breakAlliance', nation: me, with: traitorTo });
       this.memory.betrayTarget = traitorTo;
