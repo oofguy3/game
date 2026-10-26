@@ -1,6 +1,6 @@
 import { CONFIG } from '../../shared/config';
 import { BUILDING_TYPES } from '../../shared/types';
-import type { BuildingType, Command, NationId, TileIndex } from '../../shared/types';
+import type { BuildingType, Command, NationId, NukeKind, TileIndex } from '../../shared/types';
 import type { BuildingSnap } from '../../worker/protocol';
 import { formatNumber } from '../format';
 import type { MapInfo } from '../mapInfo';
@@ -25,9 +25,36 @@ export interface MenuContext {
   /** The attack-size slider's share of troops. */
   ratio(): number;
   openDiplomacy(nation: NationId): void;
+  /** Arms a nuke so the next click picks its target. */
+  aimNuke(kind: NukeKind): void;
 }
 
 const COAST_ONLY: readonly BuildingType[] = ['port', 'navalBase'];
+const NUKE_KINDS = ['atom', 'hydrogen', 'mirv'] as const;
+const NUKE_LABELS: Record<NukeKind, string> = { atom: 'Atom bomb', hydrogen: 'Hydrogen bomb', mirv: 'MIRV' };
+
+/** Nuke weapons, when the player has a finished silo and the tile is land. Null when there is nothing to offer. */
+function nukeEntries(ctx: MenuContext, tile: TileIndex): MenuEntry | null {
+  const { state, info } = ctx;
+  if (!info.isLand(tile)) return null;
+  const me = state.init.playerId;
+  const silos = state.buildings.filter((b) => b.owner === me && b.type === 'missileSilo' && !b.underConstruction);
+  if (silos.length === 0) return null;
+  const player = state.player;
+  if (!player) return null;
+  return {
+    label: 'Nuke ▸',
+    submenu: NUKE_KINDS.map((kind) => {
+      const cost = CONFIG.nukes[kind].cost;
+      return {
+        label: NUKE_LABELS[kind],
+        detail: formatNumber(cost),
+        disabled: cost > player.gold,
+        run: () => ctx.aimNuke(kind),
+      };
+    }),
+  };
+}
 
 /**
  * What a right-click on `tile` offers the player while the game is on:
@@ -45,23 +72,27 @@ export function menuEntries(ctx: MenuContext, tile: TileIndex): MenuEntry[] {
   const me = state.init.playerId;
   const owner = state.owner[tile];
   const land = info.isLand(tile);
-  const allied = owner !== 0 && owner !== me && state.nations.get(owner)?.relationToPlayer === 'allied';
+  const nation = owner === 0 ? undefined : state.nations.get(owner);
+  const allied = owner !== 0 && owner !== me && nation?.relationToPlayer === 'allied';
+  const shielded = owner !== 0 && owner !== me && nation?.shielded === true;
   const entries: MenuEntry[] = [];
 
   if (land && owner !== me) {
     entries.push({
-      label: 'Attack', disabled: allied, detail: allied ? 'allied' : undefined,
+      label: 'Attack', disabled: allied || shielded, detail: allied ? 'allied' : shielded ? 'protected' : undefined,
       run: () => send({ type: 'attack', nation: me, tile, ratio: ctx.ratio(), allowBoat: true }),
     });
     if (info.coastal[tile]) {
       entries.push({
-        label: 'Send boat', disabled: allied, detail: allied ? 'allied' : undefined,
+        label: 'Send boat', disabled: allied || shielded, detail: allied ? 'allied' : shielded ? 'protected' : undefined,
         run: () => send({ type: 'boat', nation: me, tile, ratio: ctx.ratio() }),
       });
     }
   }
   entries.push(airEntry(ctx, tile, 'Bomb', () => send({ type: 'bomb', nation: me, tile })));
   entries.push(airEntry(ctx, tile, 'Paratroopers', () => send({ type: 'paradrop', nation: me, tile, ratio: ctx.ratio() })));
+  const nukes = nukeEntries(ctx, tile);
+  if (nukes) entries.push(nukes);
 
   if (owner === me) {
     entries.push({
@@ -80,6 +111,14 @@ export function menuEntries(ctx: MenuContext, tile: TileIndex): MenuEntry[] {
     if (base) entries.push({ label: 'Build warship', run: () => send({ type: 'buildUnit', nation: me, unit: 'warship', buildingId: base.id }) });
     const airport = ownBuildingAt(ctx, tile, 'airport');
     if (airport) entries.push({ label: 'Build fighter', run: () => send({ type: 'buildUnit', nation: me, unit: 'fighter', buildingId: airport.id }) });
+    if (state.fallout[tile] === 1) {
+      entries.push({
+        label: 'Decontaminate',
+        detail: formatNumber(CONFIG.nukes.cleanCost),
+        disabled: player.gold < CONFIG.nukes.cleanCost,
+        run: () => send({ type: 'clean', nation: me, tile }),
+      });
+    }
   }
 
   if (!land) {
@@ -155,6 +194,7 @@ function airReason(ctx: MenuContext, tile: TileIndex, bomb: boolean): string | n
   if (owner === me) return 'your land';
   if (bomb && owner === 0) return 'nobody owns that';
   if (owner !== 0 && state.nations.get(owner)?.relationToPlayer === 'allied') return 'allied';
+  if (owner !== 0 && state.nations.get(owner)?.shielded) return 'protected';
   const airports = state.buildings.filter((b) => b.owner === me && b.type === 'airport' && !b.underConstruction);
   if (airports.length === 0) return 'no airport';
   const x = tile % info.width;

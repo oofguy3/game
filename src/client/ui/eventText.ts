@@ -64,8 +64,17 @@ export function describeEvent(e: GameEvent, names: Map<NationId, string>, me: Na
         return `peace with ${n(other)}`;
       }
       case 'betrayal':
+        if (e.betrayer === me) return `you broke with ${n(e.victim)} — TRAITOR for 30s`;
         if (e.victim === me) return `${n(e.betrayer)} betrayed you!`;
-        return `${n(e.betrayer)} betrayed ${n(e.victim)}`;
+        return `${n(e.betrayer)} betrayed ${n(e.victim)} — TRAITOR`;
+      case 'nuked': {
+        const bomb = e.kind === 'atom' ? 'atom bomb' : e.kind === 'hydrogen' ? 'hydrogen bomb' : 'MIRV';
+        if (e.by === me) return e.owner === 0 ? `your ${bomb} scorched empty land` : `your ${bomb} hit ${n(e.owner)}`;
+        return `${n(e.by)}'s ${bomb} hit you`;
+      }
+      case 'nukeIntercepted':
+        if (e.by === me) return `your SAM shot down ${n(e.owner)}'s missile`;
+        return `${n(e.by)}'s SAM shot down your missile`;
       case 'phase':
         return e.phase === 'playing' ? 'The war begins!' : null;
       case 'gameOver':

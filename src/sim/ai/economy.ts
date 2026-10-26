@@ -50,6 +50,9 @@ export function rankBuilds(game: Game, p: Perception, bot: Bot): BuildPlan[] {
       : 0,
     antiAir: (antiAirSite(game, p)?.count ?? 0) * CONFIG.ai.antiAirValue * H * w.defense,
     radar: (radarSite(game, p.me)?.count ?? 0) * CONFIG.ai.radarValue * H * w.defense,
+    // The player builds these. Bots leave them alone so a nuke doesn't rewrite the difficulty curve.
+    missileSilo: 0,
+    samLauncher: 0,
   };
   const plans: BuildPlan[] = [];
   for (const type of BUILDING_TYPES) {

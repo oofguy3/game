@@ -134,7 +134,11 @@ function frontierTallies(game: Game, attacker: NationId): Map<NationId, Frontier
     if (o === 0) {
       tally.weight += terrain;
       tally.landmasses.add(map.landmass[t]);
-    } else tally.weight += terrain * defenseMultiplier(game, t);
+    } else {
+      let weight = terrain * defenseMultiplier(game, t);
+      if (game.tick < game.nations[o].traitorUntil) weight *= CONFIG.diplomacy.traitorAttackCost;
+      tally.weight += weight;
+    }
   };
   for (const b of game.nations[attacker].border) forEachNeighbor(map, b, visit);
   cache.byAttacker.set(attacker, tallies);
@@ -146,7 +150,10 @@ function captureCostAt(game: Game, tile: TileIndex, ownerDensity: number): numbe
   const { terrainCost, neutralCost, baseCost, densityFactor } = CONFIG.combat;
   const t = terrainCost[game.map.terrain[tile]];
   if (game.owner[tile] === 0) return t * neutralCost;
-  return t * (baseCost + ownerDensity * densityFactor) * defenseMultiplier(game, tile);
+  let cost = t * (baseCost + ownerDensity * densityFactor) * defenseMultiplier(game, tile);
+  const owner = game.owner[tile];
+  if (game.tick < game.nations[owner].traitorUntil) cost *= CONFIG.diplomacy.traitorAttackCost;
+  return cost;
 }
 
 /** The number of unowned land tiles on `landmasses`, capped at `cap`. */

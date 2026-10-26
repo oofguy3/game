@@ -2,10 +2,11 @@ import { CONFIG } from '../shared/config';
 import type { MapChoice, NationId, Relation, TileIndex } from '../shared/types';
 import type { BuildingSnap, GameUpdate, InitPayload, LookOptions, NationSnap } from '../worker/protocol';
 import type { Game } from './core/game';
-import { inBounds, tileOf } from './map/grid';
+import { inBounds, tileOf, xOf, yOf } from './map/grid';
 import { WORLD_PROJECTION } from './map/worldMap';
 import type { Match } from './match';
 import { goldIncome, maxTroops } from './systems/economy';
+import { isShielded } from './systems/protection';
 
 /** How far from a nation's centroid (in tiles) its label may move to sit on its own land. */
 const LABEL_SEARCH = 30;
@@ -42,7 +43,9 @@ export function buildInit(match: Match, look: LookOptions): InitPayload {
     height: game.map.height,
     terrain: new Uint8Array(game.map.terrain),
     playerId: game.playerId,
-    nations: game.nations.slice(1).map((n) => ({ id: n.id, name: n.name, color: n.color, isPlayer: n.isPlayer })),
+    nations: game.nations.slice(1).map((n) => ({
+      id: n.id, name: n.name, color: n.color, isPlayer: n.isPlayer, role: n.role,
+    })),
     spawnEndsAt: game.spawnEndsAt,
     look,
   };
@@ -99,29 +102,54 @@ export function buildUpdate(match: Match): GameUpdate {
       allies: n.alive ? alliesOf(game, n.id) : [],
       attackingPlayer: attackingPlayer(game, n.id),
       label: state.labels[n.id] ?? null,
+      scoreTiles: n.tiles - n.falloutTiles,
+      role: n.role,
+      traitor: game.tick < n.traitorUntil,
+      shielded: isShielded(game, n.id),
       stats: { ...n.stats },
     })),
     buildings,
-    units: [...game.units.values()].map((u) => ({ id: u.id, type: u.type, owner: u.owner, x: u.x, y: u.y, troops: u.troops })),
+    units: [...game.units.values()].map((u) => ({
+      id: u.id, type: u.type, owner: u.owner, x: u.x, y: u.y, troops: u.troops, heading: headingOf(game, u),
+    })),
     events: game.drainEvents(),
     requests: player === 0 ? [] : [...game.requests.values()].filter((r) => r.to === player),
     result: game.result,
-    fronts: frontsOf(game),
+    ...frontsOf(game),
+    ...falloutOf(game),
   };
 }
 
-/** The running attacks between two nations as [attacker, target], each pair once, sorted. */
-function frontsOf(game: Game): [NationId, NationId][] {
-  const seen = new Set<number>();
-  const out: [NationId, NationId][] = [];
+/** Where a boat or missile is going, or null for anything else. */
+function headingOf(game: Game, u: { type: string; targetTile: number; path: readonly number[] }): { x: number; y: number } | null {
+  if (u.type !== 'troopBoat' && u.type !== 'missile') return null;
+  const tile = u.targetTile >= 0 ? u.targetTile : u.path[u.path.length - 1];
+  if (tile === undefined || tile < 0) return null;
+  return { x: xOf(game.map, tile), y: yOf(game.map, tile) };
+}
+
+function falloutOf(game: Game): { falloutOn: Uint32Array; falloutOff: Uint32Array } {
+  const drained = game.drainFallout();
+  return { falloutOn: new Uint32Array(drained.on), falloutOff: new Uint32Array(drained.off) };
+}
+
+/** The running attacks between two nations as [attacker, target], each pair once, sorted, with the troops in each. */
+function frontsOf(game: Game): { fronts: [NationId, NationId][]; frontTroops: number[] } {
+  const seen = new Map<number, number>();
   for (const a of game.attacks) {
     if (a.target === 0) continue;
     const key = a.attacker * game.nations.length + a.target;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push([a.attacker, a.target]);
+    seen.set(key, (seen.get(key) ?? 0) + a.troops);
   }
-  return out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const keys = [...seen.keys()].sort((a, b) => a - b);
+  const fronts: [NationId, NationId][] = [];
+  const frontTroops: number[] = [];
+  const n = game.nations.length;
+  for (const key of keys) {
+    fronts.push([Math.floor(key / n), key % n]);
+    frontTroops.push(seen.get(key) ?? 0);
+  }
+  return { fronts, frontTroops };
 }
 
 function uniqueTiles(tiles: TileIndex[]): TileIndex[] {

@@ -8,7 +8,7 @@ import { h, setText } from './dom';
 import { BUILDING_HINTS, BUILDING_LABELS } from './labels';
 
 /** Hotkeys for the build buttons, in BUILDING_TYPES order. */
-export const BUILD_HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'];
+export const BUILD_HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'n'];
 const TICKS_PER_SECOND = 1000 / CONFIG.tickMs;
 
 /** What the player's next building of `type` costs, as the simulation will charge it. */

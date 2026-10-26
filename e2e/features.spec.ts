@@ -53,8 +53,13 @@ test('build, boat, bomber, alliance', async ({ page }) => {
   await expect.poll(() => activeBuildings(page, 'port'), { timeout: 20_000 }).toBe(1);
   await expect.poll(() => activeBuildings(page, 'airport'), { timeout: 20_000 }).toBe(1);
 
-  // bomb an enemy from the right-click menu, once one has come within the airport's range
-  await expect.poll(() => page.evaluate(() => window.__test.findLandTile('bomb-target')), { timeout: 40_000 }).not.toBeNull();
+  // bomb an enemy from the right-click menu, once one is in range and the opening shield is down
+  await expect.poll(() => page.evaluate(() => {
+    const tile = window.__test.findLandTile('bomb-target');
+    if (tile === null) return false;
+    const owner = window.__test.state.owner[tile];
+    return window.__test.state.nations.get(owner)?.shielded !== true;
+  }), { timeout: 80_000 }).toBe(true);
   await clickTile(page, 'bomb-target', 'right');
   const menu = page.locator('.context-menu');
   await expect(menu).toBeVisible();

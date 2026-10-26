@@ -1,5 +1,5 @@
 import { BUILDING_TYPES } from '../../shared/types';
-import type { BuildingType, Difficulty, NationId, Personality, TileIndex } from '../../shared/types';
+import type { BuildingType, Difficulty, NationId, NationRole, Personality, TileIndex } from '../../shared/types';
 
 export interface Nation {
   id: NationId;
@@ -7,6 +7,8 @@ export interface Nation {
   /** 0xRRGGBB. */
   color: number;
   isPlayer: boolean;
+  /** Tribes are small neutral farms. Everyone else is a nation. */
+  role: NationRole;
   difficulty: Difficulty | null;
   personality: Personality | null;
   alive: boolean;
@@ -17,6 +19,12 @@ export interface Nation {
   gold: number;
   /** Moving average of gold earned from trade, per tick. */
   tradeIncome: number;
+  /** Opening shield: cleared by attacking another nation. Tribes never have one. */
+  shield: boolean;
+  /** Tick until which breaking an alliance marks this nation TRAITOR; 0 if it never has. */
+  traitorUntil: number;
+  /** Owned tiles covered in fallout. They still count as land held, but not toward the win. */
+  falloutTiles: number;
   tiles: number;
   /** Owned tiles with a 4-neighbour not owned by this nation (water counts; the map edge doesn't). */
   border: Set<TileIndex>;
@@ -36,16 +44,20 @@ export function emptyBuildingCounts(): Record<BuildingType, number> {
 
 /** A living, unspawned nation with nothing owned. */
 export function createNation(
-  init: Pick<Nation, 'id' | 'name' | 'color' | 'isPlayer' | 'difficulty' | 'personality'>,
+  init: Pick<Nation, 'id' | 'name' | 'color' | 'isPlayer' | 'difficulty' | 'personality'> & { role?: NationRole },
 ): Nation {
   return {
     ...init,
+    role: init.role ?? 'nation',
     alive: true,
     spawned: false,
     spawnTile: -1,
     troops: 0,
     gold: 0,
     tradeIncome: 0,
+    shield: (init.role ?? 'nation') !== 'tribe',
+    traitorUntil: 0,
+    falloutTiles: 0,
     tiles: 0,
     border: new Set(),
     sumX: 0,

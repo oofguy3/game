@@ -12,6 +12,8 @@ export const BUILDING_LABELS: Record<BuildingType, string> = {
   airport: 'Airport',
   antiAir: 'Anti-air gun',
   radar: 'Radar station',
+  missileSilo: 'Silo',
+  samLauncher: 'SAM',
 };
 
 export const BUILDING_HINTS: Record<BuildingType, string> = {
@@ -26,6 +28,8 @@ export const BUILDING_HINTS: Record<BuildingType, string> = {
   airport: 'Planes and trade planes',
   antiAir: 'Shoots down enemy planes',
   radar: 'Warns of planes, boosts anti-air',
+  missileSilo: 'Unlocks atom, hydrogen and MIRV bombs',
+  samLauncher: 'Shoots down incoming nukes',
 };
 
 export const UNIT_LABELS: Record<UnitType, string> = {
@@ -36,4 +40,5 @@ export const UNIT_LABELS: Record<UnitType, string> = {
   bomber: 'bomber',
   paraPlane: 'paratrooper plane',
   fighter: 'fighter',
+  missile: 'missile',
 };

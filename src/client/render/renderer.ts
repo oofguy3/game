@@ -107,6 +107,7 @@ export class Renderer {
       ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.gl!.draw(this.view(start));
     } else this.drawFlatMap();
+    this.drawFallout();
     const { width } = state.init;
 
     const iconSize = Math.min(28, Math.max(7, camera.zoom * 2.4));
@@ -197,6 +198,14 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(15, 23, 42, 0.75)';
       ctx.fillStyle = '#ffffff';
       const name = this.names.get(n.id) ?? '';
+      if (n.traitor && px >= 11) {
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = `800 ${Math.round(px * 0.55)}px system-ui, sans-serif`;
+        ctx.strokeText('TRAITOR', p.x, p.y - px * 0.85);
+        ctx.fillText('TRAITOR', p.x, p.y - px * 0.85);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `600 ${Math.round(px)}px system-ui, sans-serif`;
+      }
       ctx.strokeText(name, p.x, p.y);
       ctx.fillText(name, p.x, p.y);
       if (px >= 14) {
@@ -207,6 +216,20 @@ export class Renderer {
         ctx.strokeText(troops, p.x, p.y + px * 0.85);
         ctx.fillText(troops, p.x, p.y + px * 0.85);
       }
+    }
+  }
+
+  /** Green glass over radioactive tiles. They stay owned, but they do not count toward the win. */
+  private drawFallout(): void {
+    const tiles = this.state.falloutList;
+    if (tiles.length === 0) return;
+    const { ctx, camera } = this;
+    const width = this.state.init.width;
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.5)';
+    for (const t of tiles) {
+      const p = camera.tileToScreen(t % width, Math.floor(t / width));
+      if (!this.onScreen(p.x, p.y, camera.zoom)) continue;
+      ctx.fillRect(p.x, p.y, camera.zoom + 0.5, camera.zoom + 0.5);
     }
   }
 

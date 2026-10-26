@@ -40,6 +40,12 @@ export class SoundDirector {
         case 'bombed':
           if (e.by === me || e.owner === me) out.add('boom');
           break;
+        case 'nuked':
+          if (e.by === me || e.owner === me) out.add('boom');
+          break;
+        case 'nukeIntercepted':
+          if (e.by === me || e.owner === me) out.add('warning');
+          break;
         case 'landed':
           if (e.nation === me) out.add('landing');
           break;

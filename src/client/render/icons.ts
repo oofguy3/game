@@ -63,6 +63,14 @@ export function drawBuildingIcon(ctx: Ctx, type: BuildingType, x: number, y: num
       ctx.moveTo(-h * 0.15, h * 0.2); ctx.lineTo(h * 0.15, h * 0.2); ctx.lineTo(h * 0.3, h); ctx.lineTo(-h * 0.3, h);
       ctx.closePath();
       break;
+    case 'missileSilo': // rocket
+      ctx.moveTo(0, -h); ctx.lineTo(h * 0.45, h); ctx.lineTo(-h * 0.45, h); ctx.closePath();
+      ctx.moveTo(-h * 0.7, h * 0.15); ctx.lineTo(0, -h * 0.2); ctx.lineTo(h * 0.7, h * 0.15);
+      break;
+    case 'samLauncher': // upward launcher
+      ctx.moveTo(-h, h); ctx.lineTo(h, h); ctx.lineTo(h * 0.35, h * 0.2); ctx.lineTo(-h * 0.35, h * 0.2); ctx.closePath();
+      ctx.moveTo(0, h * 0.2); ctx.lineTo(0, -h); ctx.lineTo(h * 0.45, -h * 0.35); ctx.lineTo(0, -h * 0.15);
+      break;
   }
   ctx.fill();
   ctx.stroke();
@@ -102,6 +110,9 @@ export function drawUnitIcon(ctx: Ctx, type: UnitType, x: number, y: number, siz
       if (type === 'tradeShip') { ctx.moveTo(0, -h * 0.35); ctx.lineTo(0, -h); ctx.lineTo(h * 0.5, -h * 0.5); ctx.closePath(); }
       break;
     }
+    case 'missile': // a narrow dart
+      ctx.moveTo(0, -h); ctx.lineTo(h * 0.35, h * 0.2); ctx.lineTo(0, h); ctx.lineTo(-h * 0.35, h * 0.2); ctx.closePath();
+      break;
     default: // planes: a chevron
       ctx.moveTo(0, -h); ctx.lineTo(h, h * 0.6); ctx.lineTo(0, h * 0.15); ctx.lineTo(-h, h * 0.6); ctx.closePath();
   }

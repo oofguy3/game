@@ -36,15 +36,16 @@ export class EndScreen {
     const defeated = state.playerDefeated;
     if (!result && !defeated) return;
     const me = state.init.playerId;
-    const title = result
-      ? result.winners.includes(me) ? (result.reason === 'alliance' ? 'Alliance victory' : 'Victory') : 'Defeat'
-      : 'Defeat';
+    const won = result !== null && result.winners.includes(me);
+    const title = won && result
+      ? (result.reason === 'alliance' ? 'Alliance victory' : 'Victory')
+      : 'YOUR NATION HAS FALLEN';
     const key = `${title}|${result ? 'over' : 'running'}`;
     if (key === this.shownFor) return;
     if (!result && this.dismissed) return;
     this.shownFor = key;
     this.dismissed = false;
-    const victory = title !== 'Defeat';
+    const victory = won;
     const stats = state.player?.stats;
     const seconds = Math.floor(state.tick / 10);
     const list: Stat[] = [

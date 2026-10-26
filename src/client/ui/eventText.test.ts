@@ -23,6 +23,10 @@ describe('describeEvent', () => {
     [{ type: 'phase', phase: 'playing' }, 'The war begins!'],
     [{ type: 'relation', a: 1, b: 2, relation: 'war' }, 'You are at war with Varlonia'],
     [{ type: 'radarWarning', nation: 1, from: 2, unit: 'bomber', tile: 0 }, 'Bombers incoming from Varlonia!'],
+    [{ type: 'nuked', by: 2, owner: 1, tile: 0, kind: 'atom' }, "Varlonia's atom bomb hit you"],
+    [{ type: 'nuked', by: 1, owner: 3, tile: 0, kind: 'mirv' }, 'Your MIRV hit Kestria'],
+    [{ type: 'nukeIntercepted', by: 1, owner: 2, tile: 0 }, "Your SAM shot down Varlonia's missile"],
+    [{ type: 'betrayal', betrayer: 1, victim: 2 }, 'You broke with Varlonia — TRAITOR for 30s'],
   ])('%j', (e, text) => expect(say(e)).toBe(text));
 
   it('skips events not worth a line', () => {

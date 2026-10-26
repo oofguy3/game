@@ -46,6 +46,10 @@ export function isAlarm(e: GameEvent, me: NationId): boolean {
       return e.owner === me;
     case 'betrayal':
       return e.victim === me;
+    case 'nuked':
+      return e.owner === me;
+    case 'nukeIntercepted':
+      return e.owner === me;
     default:
       return false;
   }

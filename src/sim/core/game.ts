@@ -3,6 +3,7 @@ import { CONFIG } from '../../shared/config';
 import type {
   Command, DiplomacyRequest, Difficulty, GameEvent, GameResult, NationId, Personality, Phase, TileIndex,
 } from '../../shared/types';
+import { countryNames } from './countries';
 import type { GameMap } from '../map/gameMap';
 import { forEachNeighbor, xOf, yOf } from '../map/grid';
 import { buildWaterNav } from '../map/waterNav';
@@ -12,8 +13,10 @@ import type { Attack } from '../systems/attacks';
 import { BuildingStore, onTileCaptured, stepBuildings } from '../systems/buildings';
 import { stepDiplomacy } from '../systems/diplomacy';
 import { stepEconomy } from '../systems/economy';
+import { stepMissiles, stepSilos } from '../systems/nukes';
 import { Relations } from '../systems/relations';
 import { endSpawnPhase } from '../systems/spawn';
+import { stepTribes, tribeNameList, tribeNameRng } from '../systems/tribes';
 import { stepUnits } from '../systems/units';
 import type { Unit } from '../systems/units';
 import { checkVictory } from '../systems/victory';
@@ -28,6 +31,12 @@ export interface GameSetup {
   seed: number;
   player: { name: string } | null;
   bots: { difficulty: Difficulty; personality?: Personality }[];
+  /** Small neutral tribes scattered for the opening. Defaults to 0. */
+  tribes?: number;
+  /** World-map bots take real country names. Defaults to invented names. */
+  botNames?: 'countries' | 'invented';
+  /** When set, every non-player nation starts allied with the others. */
+  teamMode?: boolean;
   spawnTicks?: number;
   debug?: boolean;
   /** Whether `step` ends the game on a win condition. Defaults to true. */
@@ -54,10 +63,15 @@ export class Game {
   readonly rng: Rng;
   readonly debug: boolean;
   readonly checkVictory: boolean;
+  readonly teamMode: boolean;
   tick = 0;
   phase: Phase = 'spawn';
   result: GameResult | null = null;
   spawnEndsAt: number;
+  /** Tick at which opening shields expire. 0 until the war begins. */
+  protectUntil = 0;
+  /** Set once tribes have been scattered, so a second attempt does nothing. */
+  tribesPlaced = false;
   /** Minimum distance between the spawns that nations choose; random spawns relax it when the map is crowded. */
   spawnSpacing: number;
   /** Owning nation per tile; 0 = unowned. */
@@ -66,6 +80,12 @@ export class Game {
   ownerVersion = 0;
   /** Unowned land tiles left on each landmass, by landmass id. */
   readonly unownedLand: Int32Array;
+  /** 1 on tiles covered by fallout. */
+  readonly fallout: Uint8Array;
+  /** How many land tiles are fallout. */
+  falloutCount = 0;
+  private falloutOn: TileIndex[] = [];
+  private falloutOff: TileIndex[] = [];
   /** Indexed by nation id; `nations[0]` is the placeholder for unowned land and is never alive. */
   nations: Nation[];
   /** The human player's nation id, or 0 when there is no player. */
@@ -93,9 +113,11 @@ export class Game {
     this.rng = new Rng(setup.seed);
     this.debug = setup.debug ?? false;
     this.checkVictory = setup.checkVictory ?? true;
+    this.teamMode = setup.teamMode ?? false;
     this.spawnEndsAt = setup.spawnTicks ?? CONFIG.spawn.phaseTicks;
     this.owner = new Uint16Array(setup.map.width * setup.map.height);
     this.unownedLand = Int32Array.from(setup.map.landmassSize);
+    this.fallout = new Uint8Array(setup.map.width * setup.map.height);
 
     const unowned = createNation({
       id: 0, name: UNOWNED_NAME, color: UNOWNED_COLOR, isPlayer: false, difficulty: null, personality: null,
@@ -108,7 +130,9 @@ export class Game {
       }));
     }
     this.playerId = setup.player ? 1 : 0;
-    const names = nationNames(this.rng.fork(NAMES_RNG_SALT), setup.bots.length);
+    const names = setup.botNames === 'countries'
+      ? countryNames(this.rng.fork(NAMES_RNG_SALT), setup.bots.length, setup.player?.name ?? '')
+      : nationNames(this.rng.fork(NAMES_RNG_SALT), setup.bots.length);
     setup.bots.forEach((bot, i) => {
       const id = this.nations.length;
       this.nations.push(createNation({
@@ -116,8 +140,16 @@ export class Game {
         difficulty: bot.difficulty, personality: bot.personality ?? null,
       }));
     });
+    const tribeNames = tribeNameList(tribeNameRng(this), setup.tribes ?? 0);
+    tribeNames.forEach((name) => {
+      const id = this.nations.length;
+      this.nations.push(createNation({
+        id, name, color: nationColor(id, false), isPlayer: false, difficulty: null, personality: null, role: 'tribe',
+      }));
+    });
     this.relations = new Relations(this.nations.length);
-    this.spawnSpacing = spawnSpacingFor(setup.map.landCount, this.nations.length - 1);
+    const majors = this.nations.filter((n) => n.id !== 0 && n.role !== 'tribe').length;
+    this.spawnSpacing = spawnSpacingFor(setup.map.landCount, majors);
     this.onOwnerChange.push((tile, from, to) => onTileCaptured(this, tile, from, to));
   }
 
@@ -151,9 +183,12 @@ export class Game {
       return;
     }
     stepBuildings(this);
+    stepSilos(this);
     stepEconomy(this);
     stepAttacks(this);
+    stepTribes(this);
     stepUnits(this);
+    stepMissiles(this);
     stepDiplomacy(this);
     if (this.checkVictory) {
       const result = checkVictory(this);
@@ -177,6 +212,10 @@ export class Game {
     this.ownerVersion++;
     const landmass = this.map.landmass[tile];
     if (landmass >= 0 && (from === 0 || to === 0)) this.unownedLand[landmass] += from === 0 ? -1 : 1;
+    if (this.fallout[tile] === 1) {
+      if (from !== 0) this.nations[from].falloutTiles--;
+      if (to !== 0) this.nations[to].falloutTiles++;
+    }
     const x = xOf(this.map, tile);
     const y = yOf(this.map, tile);
     if (from !== 0) {
@@ -213,6 +252,20 @@ export class Game {
     const tiles = this.changedTiles;
     this.changedTiles = [];
     return tiles;
+  }
+
+  /** Records a fallout tile flipping to `on`, for the next snapshot. */
+  noteFallout(tile: TileIndex, on: boolean): void {
+    (on ? this.falloutOn : this.falloutOff).push(tile);
+  }
+
+  /** Fallout tiles that appeared and cleared since the last call. */
+  drainFallout(): { on: TileIndex[]; off: TileIndex[] } {
+    const on = this.falloutOn;
+    const off = this.falloutOff;
+    this.falloutOn = [];
+    this.falloutOff = [];
+    return { on, off };
   }
 
   alive(): Nation[] {

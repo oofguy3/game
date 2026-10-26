@@ -2,6 +2,7 @@ import type { NationId } from '../../shared/types';
 import type { UnitSnap } from '../../worker/protocol';
 import type { Camera } from '../camera';
 import { drawUnitIcon } from './icons';
+import { css } from './palette';
 
 /** Assumed time between updates until two have arrived. */
 const DEFAULT_INTERVAL_MS = 100;
@@ -42,7 +43,21 @@ export function drawUnits(
 ): void {
   for (const { unit, x, y } of units.positions(now)) {
     const p = camera.tileToScreen(x + 0.5, y + 0.5);
+    const color = colors.get(unit.owner) ?? 0x808080;
+    if (unit.heading && (unit.type === 'troopBoat' || unit.type === 'missile')) {
+      const h = camera.tileToScreen(unit.heading.x + 0.5, unit.heading.y + 0.5);
+      ctx.save();
+      ctx.setLineDash([5, 7]);
+      ctx.strokeStyle = css(color);
+      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = Math.max(1, size / 10);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(h.x, h.y);
+      ctx.stroke();
+      ctx.restore();
+    }
     if (!visible(p.x, p.y)) continue;
-    drawUnitIcon(ctx, unit.type, p.x, p.y, size, colors.get(unit.owner) ?? 0x808080);
+    drawUnitIcon(ctx, unit.type, p.x, p.y, size, color);
   }
 }

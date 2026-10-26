@@ -5,14 +5,18 @@ export type Terrain = (typeof Terrain)[keyof typeof Terrain];
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'insane';
 export type Personality = 'aggressive' | 'builder' | 'trader' | 'opportunist' | 'diplomat';
 export type BuildingType = 'city' | 'factory' | 'barracks' | 'bank' | 'defensePost' | 'fortress'
-  | 'port' | 'navalBase' | 'airport' | 'antiAir' | 'radar';
+  | 'port' | 'navalBase' | 'airport' | 'antiAir' | 'radar' | 'missileSilo' | 'samLauncher';
 export const BUILDING_TYPES: readonly BuildingType[] = ['city', 'factory', 'barracks', 'bank', 'defensePost',
-  'fortress', 'port', 'navalBase', 'airport', 'antiAir', 'radar'];
-export type UnitType = 'troopBoat' | 'tradeShip' | 'warship' | 'tradePlane' | 'bomber' | 'paraPlane' | 'fighter';
+  'fortress', 'port', 'navalBase', 'airport', 'antiAir', 'radar', 'missileSilo', 'samLauncher'];
+export type UnitType = 'troopBoat' | 'tradeShip' | 'warship' | 'tradePlane' | 'bomber' | 'paraPlane' | 'fighter' | 'missile';
+/** A warhead launched from a missile silo. */
+export type NukeKind = 'atom' | 'hydrogen' | 'mirv';
+export type NationRole = 'nation' | 'tribe';
+export type GameMode = 'ffa' | 'nations';
 export type Relation = 'neutral' | 'allied' | 'war';
 export type Phase = 'spawn' | 'playing' | 'ended';
 export type MapSize = 'small' | 'medium' | 'large';
-export type MapChoice = { kind: 'world' } | { kind: 'random'; size: MapSize; seed: number };
+export type MapChoice = { kind: 'world' } | { kind: 'random'; size: MapSize; seed: number } | { kind: 'box'; size: MapSize; seed: number };
 export interface Deal { giveGold: number; giveTroops: number; getGold: number; getTroops: number }
 export interface DiplomacyRequest {
   id: number; kind: 'alliance' | 'peace' | 'deal' | 'jointAttack'; from: NationId; to: NationId;
@@ -34,6 +38,8 @@ export type Command =
   | { type: 'requestJointAttack'; nation: NationId; to: NationId; target: NationId }
   | { type: 'respond'; nation: NationId; requestId: number; accept: boolean }
   | { type: 'embargo'; nation: NationId; with: NationId; on: boolean }
+  | { type: 'nuke'; nation: NationId; tile: TileIndex; kind: NukeKind }
+  | { type: 'clean'; nation: NationId; tile: TileIndex }
   | { type: 'debugGrant'; nation: NationId; gold?: number; troops?: number }; // only when GameSetup.debug
 export interface GameResult { winners: NationId[]; reason: 'landShare' | 'lastStanding' | 'alliance' }
 export type GameEvent =
@@ -54,4 +60,6 @@ export type GameEvent =
   | { type: 'requestResolved'; requestId: number; kind: DiplomacyRequest['kind']; from: NationId; to: NationId; accepted: boolean }
   | { type: 'relation'; a: NationId; b: NationId; relation: Relation }
   | { type: 'betrayal'; betrayer: NationId; victim: NationId }
+  | { type: 'nuked'; by: NationId; owner: NationId; tile: TileIndex; kind: NukeKind }
+  | { type: 'nukeIntercepted'; by: NationId; owner: NationId; tile: TileIndex }
   | { type: 'gameOver'; result: GameResult };

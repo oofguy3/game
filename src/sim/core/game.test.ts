@@ -30,6 +30,8 @@ const GAMEPLAY_COMMANDS: Command[] = [
   { type: 'requestJointAttack', nation: 1, to: 1, target: 1 },
   { type: 'respond', nation: 1, requestId: 1, accept: true },
   { type: 'embargo', nation: 1, with: 1, on: true },
+  { type: 'nuke', nation: 1, tile: 1, kind: 'atom' },
+  { type: 'clean', nation: 1, tile: 1 },
 ];
 const SPAWN_COMMAND: Command = { type: 'spawn', nation: 1, tile: 1 };
 const GRANT_COMMAND: Command = { type: 'debugGrant', nation: 1, gold: 5 };

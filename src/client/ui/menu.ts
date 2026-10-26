@@ -1,4 +1,4 @@
-import type { Difficulty, MapSize } from '../../shared/types';
+import type { Difficulty, GameMode, MapSize } from '../../shared/types';
 import type { StartOptions } from '../../worker/protocol';
 import { h } from './dom';
 import { createLogo } from './logo';
@@ -18,7 +18,15 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
   const group = (label: string, control: HTMLElement): HTMLElement =>
     h('div', { class: 'field' }, h('div', { class: 'field-label', text: label }), control);
 
-  const map = createSegmented('Map', [{ value: 'world', text: 'World' }, { value: 'random', text: 'Random' }], 'world');
+  const map = createSegmented('Map', [
+    { value: 'world', text: 'World' },
+    { value: 'random', text: 'Random' },
+    { value: 'box', text: 'The Box' },
+  ], 'world');
+  const mode = createSegmented<GameMode>('Mode', [
+    { value: 'ffa', text: 'Free-for-all' },
+    { value: 'nations', text: 'Vs Nations' },
+  ], 'ffa');
   const size = createSegmented<MapSize>('Size', SIZES.map((s) => ({ value: s, text: title(s) })), 'medium');
   const seed = h('input', { attrs: { type: 'number', min: '1', step: '1' } });
   seed.value = String(1 + Math.floor(Math.random() * 999_999));
@@ -33,7 +41,7 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
   name.value = 'You';
   const randomOnly = h('div', { class: 'random-only' }, group('Size', size.el), field('Seed', seed, 'menu-seed'));
   const sync = (): void => {
-    randomOnly.classList.toggle('hidden', map.value !== 'random');
+    randomOnly.classList.toggle('hidden', map.value === 'world');
   };
   map.onChange = sync;
   sync();
@@ -44,6 +52,7 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
     h('p', { class: 'tagline', text: 'Spread across the map, build up, and take over the world.' }),
     group('Map', map.el),
     randomOnly,
+    group('Mode', mode.el),
     h('div', { class: 'field' }, h('label', { text: 'Bots', attrs: { for: 'menu-bots' } }), h('div', { class: 'bots' }, botsRange, bots)),
     group('Difficulty', difficulty.el),
     field('Your name', name, 'menu-name'),
@@ -53,13 +62,17 @@ export function createMenu(onPlay: (options: StartOptions) => void, debug: boole
     e.preventDefault();
     const count = Math.min(40, Math.max(4, Math.round(Number(bots.value) || 12)));
     const seedValue = Math.max(1, Math.round(Number(seed.value) || 1));
+    const choice = map.value === 'world'
+      ? { kind: 'world' as const }
+      : { kind: map.value === 'box' ? 'box' as const : 'random' as const, size: size.value, seed: seedValue };
     onPlay({
-      map: map.value === 'world' ? { kind: 'world' } : { kind: 'random', size: size.value, seed: seedValue },
+      map: choice,
       bots: count,
       difficulty: difficulty.value,
       seed: seedValue,
       playerName: name.value.trim() || 'You',
       debug,
+      mode: mode.value,
     });
   });
   return h('div', { class: 'overlay menu' }, form);

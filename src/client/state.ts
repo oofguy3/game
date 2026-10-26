@@ -18,12 +18,24 @@ export class ClientState {
   result: GameResult | null = null;
   /** Running attacks between two nations as [attacker, target], from the latest update. */
   fronts: [NationId, NationId][] = [];
+  /** Troops in each front, in the same order as `fronts`. */
+  frontTroops: number[] = [];
   /** How many tiles became the player's in the latest update. */
   gained = 0;
   /** The player's tiles taken by someone else in the latest update. */
   lost: TileIndex[] = [];
   /** Called with every event of each update (the feed keeps only the player's). */
   onEvents: ((events: GameEvent[]) => void) | null = null;
+  /** 1 where the map is fallout. */
+  fallout = new Uint8Array();
+  /** Tiles that are currently fallout, for drawing. */
+  falloutList: number[] = [];
+  /** Coastal flags, set by the page so the first beach can be announced. */
+  coast: Uint8Array | null = null;
+  /** The player owns a coastal tile. */
+  reachedSea = false;
+  /** Set on the update that first reaches the sea, for the hint banner. */
+  announceSea = false;
   private changed: number[] = [];
 
   get player(): NationSnap | undefined {
@@ -48,9 +60,14 @@ export class ClientState {
     this.requests = [];
     this.result = null;
     this.fronts = [];
+    this.frontTroops = [];
     this.gained = 0;
     this.lost = [];
     this.changed = [];
+    this.fallout = new Uint8Array(init.width * init.height);
+    this.falloutList = [];
+    this.reachedSea = false;
+    this.announceSea = false;
   }
 
   applyUpdate(u: GameUpdate): void {
@@ -64,10 +81,25 @@ export class ClientState {
       if (after === me && before !== me) this.gained++;
       // land going back to nobody (a moved spawn) was given up, not taken
       else if (before === me && after !== me && after !== 0) this.lost.push(t);
+      if (after === me && this.coast && this.coast[t] === 1 && !this.reachedSea) {
+        this.reachedSea = true;
+        this.announceSea = true;
+      }
       this.owner[t] = after;
       this.changed.push(t);
     }
+    for (const t of u.falloutOn ?? []) {
+      if (this.fallout[t] === 1) continue;
+      this.fallout[t] = 1;
+      this.falloutList.push(t);
+    }
+    const cleared = u.falloutOff;
+    if (cleared && cleared.length > 0) {
+      for (const t of cleared) this.fallout[t] = 0;
+      this.falloutList = this.falloutList.filter((t) => this.fallout[t] === 1);
+    }
     this.fronts = u.fronts;
+    this.frontTroops = u.frontTroops ?? [];
     this.tick = u.tick;
     this.phase = u.phase;
     this.nations = new Map(u.nations.map((n) => [n.id, n]));
@@ -118,6 +150,10 @@ export class ClientState {
         return e.to === me || e.from === me;
       case 'relation':
         return e.a === me || e.b === me;
+      case 'nuked':
+        return e.by === me || e.owner === me;
+      case 'nukeIntercepted':
+        return e.by === me || e.owner === me;
     }
   }
 }
